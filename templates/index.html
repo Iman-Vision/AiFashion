@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AI Fashion Accessorizer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="bg">
+  <div class="container">
+    <div class="hero">
+      <h1>AI Fashion Accessorizer</h1>
+      <p>Drop an image or capture live. We auto-detect upper, lower, or footwear.</p>
+      {% if request.args.get('error') == 'missing_image' %}
+      <div class="note">Please upload a photo or capture from camera.</div>
+      {% endif %}
+    </div>
+    <form class="panel" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data">
+      <div class="grid g2">
+        <div class="card upload">
+          <h2>Upload</h2>
+          <div class="drop" id="drop">
+            <input id="file" type="file" name="image" accept="image/*" class="file" aria-label="Choose image">
+            <div class="drop-hint">Drag & drop or click to select</div>
+            <img id="preview" alt="preview" style="display:none"/>
+          </div>
+        </div>
+        <div class="card camera">
+          <h2>Camera</h2>
+          <video id="video" autoplay playsinline></video>
+          <canvas id="canvas" width="640" height="480" style="display:none"></canvas>
+          <div class="row">
+            <button type="button" id="startBtn" class="btn">Start Camera</button>
+            <button type="button" id="captureBtn" class="btn">Capture Frame</button>
+          </div>
+          <input type="hidden" name="camera_image" id="camera_image"/>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="submitBtn" class="btn primary" type="submit" disabled>Create Mood Boards</button>
+      </div>
+      <div class="note">We will automatically detect whether the image is upper, lower or shoes.</div>
+    </form>
+    <footer class="foot">
+      <div>Creative, color-harmonized looks from your image.</div>
+    </footer>
+  </div>
+  <button type="button" id="themeFloating" class="theme-toggle" aria-label="Toggle theme">
+    <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
+  </button>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const startBtn = document.getElementById('startBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const hidden = document.getElementById('camera_image');
+    const file = document.getElementById('file');
+    const preview = document.getElementById('preview');
+    const submitBtn = document.getElementById('submitBtn');
+    const drop = document.getElementById('drop');
+    const themeFloating = document.getElementById('themeFloating');
+    let stream = null;
+    function updateSubmit() {
+      submitBtn.disabled = !(hidden.value || (file && file.files && file.files[0]));
+    }
+    file.addEventListener('change', () => {
+      const f = file.files[0];
+      if (f) {
+        const url = URL.createObjectURL(f);
+        preview.src = url;
+        preview.style.display = 'block';
+        updateSubmit();
+      }
+    });
+    ;['dragenter','dragover','dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation();}));
+    drop.addEventListener('drop', e=>{
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files[0]) {
+        file.files = dt.files;
+        const url = URL.createObjectURL(dt.files[0]);
+        preview.src = url;
+        preview.style.display = 'block';
+        updateSubmit();
+      }
+    });
+    startBtn.addEventListener('click', async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        video.srcObject = stream;
+      } catch(e) {
+        alert('Unable to access camera');
+      }
+    });
+    captureBtn.addEventListener('click', () => {
+      if (!stream) { alert('Start camera first'); return; }
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0);
+      hidden.value = canvas.toDataURL('image/png');
+      preview.src = hidden.value;
+      preview.style.display = 'block';
+      updateSubmit();
+    });
+    function applyTheme() {
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark') document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+    function updateIcons(){
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark'){ document.querySelector('.icon-sun').style.display='none'; document.querySelector('.icon-moon').style.display='inline'; }
+      else { document.querySelector('.icon-sun').style.display='inline'; document.querySelector('.icon-moon').style.display='none'; }
+    }
+    function toggleTheme(){
+      const current = localStorage.getItem('theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', next);
+      applyTheme();
+      updateIcons();
+    }
+    themeFloating.addEventListener('click', toggleTheme);
+    applyTheme(); updateIcons();
+  </script>
+</body>
+</html>

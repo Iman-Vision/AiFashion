@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mood Boards</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="canvas-bg">
+  <div class="container narrow">
+    <div class="topbar">
+      <a class="btn" href="{{ url_for('index') }}">← Back</a>
+      <div class="title">Detected: {{ uploaded_type|title }}</div>
+    </div>
+    {% for b in boards %}
+    <section class="canvas">
+      {% set pal = (b.palette or []) + ['#ddd', '#eee', '#ccc'] %}
+      <div class="canvas-title">{{ b.title }}</div>
+      <figure class="piece p-top">
+        <img src="{% if uploaded_type=='top' %}{{ uploaded_image }}{% else %}{{ (b.top and b.top.image) or uploaded_image }}{% endif %}" alt="Top">
+        <figcaption class="cap">{{ (b.top and b.top.name) or 'Top' }}</figcaption>
+      </figure>
+      <figure class="piece p-bottom">
+        <img src="{% if uploaded_type=='bottom' %}{{ uploaded_image }}{% else %}{{ b.bottom.image }}{% endif %}" alt="Bottom">
+        <figcaption class="cap">{{ b.bottom.name }}</figcaption>
+      </figure>
+      <figure class="piece p-shoes">
+        <img src="{% if uploaded_type=='shoes' %}{{ uploaded_image }}{% else %}{{ b.shoes.image }}{% endif %}" alt="Shoes">
+        <figcaption class="cap">{{ b.shoes.name }}</figcaption>
+      </figure>
+      {% if b.accessories %}
+      <div class="acc a1">
+        <img src="{{ b.accessories[0].image }}" alt="{{ b.accessories[0].name }}">
+      </div>
+      {% if b.accessories|length>1 %}
+      <div class="acc a2">
+        <img src="{{ b.accessories[1].image }}" alt="{{ b.accessories[1].name }}">
+      </div>
+      {% endif %}
+      {% endif %}
+      <div class="swatch s1" data-color="{{ pal[0] }}"></div>
+      <div class="swatch s2" data-color="{{ pal[1] }}"></div>
+      <div class="swatch s3" data-color="{{ pal[2] }}"></div>
+    </section>
+    {% endfor %}
+  </div>
+  <button type="button" id="themeFloating" class="theme-toggle" aria-label="Toggle theme">
+    <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
+  </button>
+  <script>
+    function applyTheme() {
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark') document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+    function updateIcons(){
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark'){ document.querySelector('.icon-sun').style.display='none'; document.querySelector('.icon-moon').style.display='inline'; }
+      else { document.querySelector('.icon-sun').style.display='inline'; document.querySelector('.icon-moon').style.display='none'; }
+    }
+    document.getElementById('themeFloating').addEventListener('click', () => {
+      const current = localStorage.getItem('theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', next);
+      applyTheme();
+      updateIcons();
+    });
+    applyTheme(); updateIcons();
+    document.querySelectorAll('.swatch').forEach(el=>{const c=el.getAttribute('data-color'); if(c){el.style.backgroundColor=c;}});
+  </script>
+</body>
+</html>
