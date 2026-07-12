@@ -1,1 +1,1 @@
-__all__ = ["detector", "recommender", "moodboard"]
+__all__ = ["autoencoder", "detector", "recommender", "moodboard"]

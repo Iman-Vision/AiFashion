@@ -1,4 +1,11 @@
-from typing import Dict, List
+import io
+import urllib.request
+from typing import Dict, List, Optional
+
+import numpy as np
+from PIL import Image
+
+from ai_fashion.autoencoder import load_image_encoder, encode_image
 
 
 Item = Dict[str, str]
@@ -109,6 +116,66 @@ STYLE_CATALOG: Dict[str, Dict[str, List[Item]]] = {
 }
 
 
+_gallery_model = None
+_gallery_transform = None
+_gallery_embeddings: Dict[str, np.ndarray] = {}
+
+
+def _load_pil_image(path_or_url: str) -> Image.Image:
+    if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
+        req = urllib.request.Request(path_or_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req) as response:
+            data = response.read()
+        return Image.open(io.BytesIO(data)).convert("RGB")
+    return Image.open(path_or_url).convert("RGB")
+
+
+def _load_gallery_encoder():
+    global _gallery_model, _gallery_transform
+    if _gallery_model is None:
+        _gallery_model, _gallery_transform = load_image_encoder()
+    return _gallery_model, _gallery_transform
+
+
+def _embed_item(item: Item):
+    key = item["image"]
+    if key in _gallery_embeddings:
+        return _gallery_embeddings[key]
+
+    model, transform = _load_gallery_encoder()
+    if model is None:
+        return None
+
+    embedding = encode_image(key, model, transform)
+    if embedding is None:
+        return None
+
+    _gallery_embeddings[key] = embedding
+    return embedding
+
+
+def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    if a is None or b is None:
+        return -1.0
+    a_norm = np.linalg.norm(a)
+    b_norm = np.linalg.norm(b)
+    if a_norm == 0 or b_norm == 0:
+        return -1.0
+    return float(np.dot(a, b) / (a_norm * b_norm))
+
+
+def _find_best_items(target_embedding: np.ndarray, candidates: List[Item], count: int = 2) -> List[Item]:
+    scored = []
+    for item in candidates:
+        emb = _embed_item(item)
+        if emb is None:
+            continue
+        score = _cosine_similarity(target_embedding, emb)
+        scored.append((score, item))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:count]]
+
+
 def recommend_for_top(top_type: str) -> List[Board]:
     styles = TOP_TO_STYLES.get(top_type, ["minimal", "casual"])
     boards: List[Board] = []
@@ -203,7 +270,15 @@ def _choose_bottom_and_shoes_from_features(features: Dict[str, object]) -> List[
     return boards
 
 
-def recommend_from_features(item_type: str, features: Dict[str, object]) -> List[Board]:
+def recommend_from_features(item_type: str, features: Dict[str, object], image_path: Optional[str] = None) -> List[Board]:
+    # If we have a trained autoencoder and an uploaded image, use embedding similarity.
+    if image_path:
+        model, _ = _load_gallery_encoder()
+        if model is not None:
+            embedding = encode_image(image_path, model, _gallery_transform)
+            if embedding is not None:
+                return recommend_from_embedding(item_type, embedding, features)
+
     boards = _choose_bottom_and_shoes_from_features(features)
     if item_type in ["bottom", "shoes"]:
         tops = ITEM_POOL["tops"]
@@ -212,3 +287,51 @@ def recommend_from_features(item_type: str, features: Dict[str, object]) -> List
         boards[0]["top"] = t1
         boards[1]["top"] = t2
     return boards
+
+
+def recommend_from_embedding(item_type: str, embedding: np.ndarray, features: Dict[str, object]) -> List[Board]:
+    boards: List[Board] = []
+    palette = features.get("dominant_colors", ["#ffffff", "#eeeeee", "#cccccc"])
+
+    if item_type == "top":
+        bottoms = _find_best_items(embedding, ITEM_POOL["bottoms"], count=2)
+        shoes = _find_best_items(embedding, ITEM_POOL["shoes"], count=2)
+        for i in range(min(len(bottoms), len(shoes))):
+            boards.append(
+                {
+                    "style": f"similar_{i + 1}",
+                    "bottom": bottoms[i],
+                    "shoes": shoes[i],
+                    "palette": palette[:3],
+                    "title": f"Style Match {i + 1}",
+                }
+            )
+    elif item_type == "bottom":
+        tops = _find_best_items(embedding, ITEM_POOL["tops"], count=2)
+        shoes = _find_best_items(embedding, ITEM_POOL["shoes"], count=2)
+        for i in range(min(len(tops), len(shoes))):
+            boards.append(
+                {
+                    "style": f"similar_{i + 1}",
+                    "top": tops[i],
+                    "shoes": shoes[i],
+                    "palette": palette[:3],
+                    "title": f"Style Match {i + 1}",
+                }
+            )
+    elif item_type == "shoes":
+        tops = _find_best_items(embedding, ITEM_POOL["tops"], count=2)
+        bottoms = _find_best_items(embedding, ITEM_POOL["bottoms"], count=2)
+        for i in range(min(len(tops), len(bottoms))):
+            boards.append(
+                {
+                    "style": f"similar_{i + 1}",
+                    "top": tops[i],
+                    "bottom": bottoms[i],
+                    "palette": palette[:3],
+                    "title": f"Style Match {i + 1}",
+                }
+            )
+    if not boards:
+        return _choose_bottom_and_shoes_from_features(features)
+    return boards[:2]

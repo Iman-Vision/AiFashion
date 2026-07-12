@@ -49,7 +49,7 @@ echo.
 echo [4/4] Starting the Application...
 echo.
 echo ======================================================
-echo   The app will be available at: http://127.0.0.1:8000
+echo   The app will be available at: http://127.0.0.1:5000
 echo   Press CTRL+C to stop the server.
 echo ======================================================
 echo.

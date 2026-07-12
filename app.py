@@ -1,3 +1,4 @@
+
 import base64
 import os
 import uuid
@@ -46,10 +47,10 @@ def analyze():
         return redirect(url_for("index", error="missing_image"))
     detected = detect_item_type(saved_path)
     feats = analyze_image(saved_path)
-    boards = recommend_from_features(detected, feats)
+    boards = recommend_from_features(detected, feats, saved_path)
     image_url = url_for("uploads", filename=Path(saved_path).name)
     return render_template("board.html", boards=boards, uploaded_image=image_url, uploaded_type=detected, features=feats)
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=False)
