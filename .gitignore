@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.idea/
+vscode/
+.DS_Store
+Re-PolyVore/
+
+# Results
+results/comparisons/*.png
+results/metrics_summary.csv
+
+# Environment variables — NEVER commit these
+.env
+backend/.env
+

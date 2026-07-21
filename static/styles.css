@@ -30,6 +30,9 @@ body.bg{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system
 .actions{display:flex;justify-content:center;margin-top:16px}
 .note{text-align:center;color:var(--muted);margin-top:8px}
 .foot{margin-top:24px;text-align:center;color:var(--muted)}
+.features-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;font-size:13px;color:var(--muted)}
+.feat{display:inline-flex;align-items:center;gap:4px}
+.mini-swatch{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid var(--border);vertical-align:middle;margin-left:2px}
 
 /* Canvas collage */
 .canvas{position:relative;background:var(--card);border:1px solid var(--border);border-radius:18px;min-height:680px;box-shadow:0 24px 48px rgba(0,0,0,.08);padding:24px;overflow:hidden;margin-bottom:28px}

@@ -5,23 +5,13 @@ from typing import Dict, List, Optional
 import numpy as np
 from PIL import Image
 
+import os
+os.environ.setdefault("KERAS_BACKEND", "torch")
 from ai_fashion.autoencoder import load_image_encoder, encode_image
 
 
 Item = Dict[str, str]
 Board = Dict[str, object]
-
-
-TOP_TO_STYLES: Dict[str, List[str]] = {
-    "shirt": ["smart_casual", "minimal"],
-    "tshirt": ["streetwear", "casual"],
-    "sweater": ["cozy", "smart_casual"],
-    "hoodie": ["streetwear", "sporty"],
-    "blouse": ["chic", "smart_casual"],
-    "polo": ["preppy", "casual"],
-    "jacket": ["streetwear", "minimal"],
-    "coat": ["minimal", "chic"],
-}
 
 
 STYLE_CATALOG: Dict[str, Dict[str, List[Item]]] = {
@@ -115,6 +105,14 @@ STYLE_CATALOG: Dict[str, Dict[str, List[Item]]] = {
     },
 }
 
+# Map DeepFashion2 item types to styles
+TYPE_TO_STYLES = {
+    "top": ["smart_casual", "minimal"],
+    "outwear": ["streetwear", "minimal"],
+    "bottom": ["casual", "smart_casual"],
+    "dress": ["chic", "minimal"],
+    "shoes": ["casual", "sporty"],
+}
 
 _gallery_model = None
 _gallery_transform = None
@@ -176,27 +174,6 @@ def _find_best_items(target_embedding: np.ndarray, candidates: List[Item], count
     return [item for _, item in scored[:count]]
 
 
-def recommend_for_top(top_type: str) -> List[Board]:
-    styles = TOP_TO_STYLES.get(top_type, ["minimal", "casual"])
-    boards: List[Board] = []
-    for style in styles[:2]:
-        catalog = STYLE_CATALOG.get(style)
-        if not catalog:
-            continue
-        bottom = catalog["bottoms"][0]
-        shoes = catalog["shoes"][0]
-        boards.append(
-            {
-                "style": style,
-                "bottom": bottom,
-                "shoes": shoes,
-                "palette": catalog["palette"],
-                "title": f"{style.replace('_', ' ').title()}",
-            }
-        )
-    return boards[:2]
-
-
 NEUTRALS = ["black", "white", "grey", "khaki", "beige", "navy"]
 
 ITEM_POOL = {
@@ -205,10 +182,19 @@ ITEM_POOL = {
         {"name": "Black Tee", "color": "black", "image": "https://images.unsplash.com/photo-1534759846116-579bd379706c?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
         {"name": "Grey Sweater", "color": "grey", "image": "https://images.unsplash.com/photo-1540577162971-3d8c67a74288?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "textured"},
     ],
+    "outwear": [
+        {"name": "Denim Jacket", "color": "blue", "image": "https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "textured"},
+        {"name": "Black Blazer", "color": "black", "image": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
+        {"name": "Beige Trench", "color": "beige", "image": "https://images.unsplash.com/photo-1544923246-77307dd270da?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
+    ],
     "bottoms": [
         {"name": "Black Trousers", "color": "black", "image": "https://images.unsplash.com/photo-1516259762381-22954d7d3ad2?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
         {"name": "Indigo Jeans", "color": "blue", "image": "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "textured"},
         {"name": "Khaki Chinos", "color": "khaki", "image": "https://images.unsplash.com/photo-1582582494700-56c65d05548f?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
+    ],
+    "dress": [
+        {"name": "Little Black Dress", "color": "black", "image": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
+        {"name": "Floral Dress", "color": "multi", "image": "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop", "pattern": "print", "texture": "smooth"},
     ],
     "shoes": [
         {"name": "White Sneakers", "color": "white", "image": "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
@@ -233,45 +219,74 @@ def _is_neutral_hex(hex_color: str) -> bool:
     return False
 
 
-def _choose_bottom_and_shoes_from_features(features: Dict[str, object]) -> List[Board]:
+def _choose_complementary(items_type: str, features: Dict[str, object]) -> List[Board]:
     dom = [x for x in features.get("dominant_colors", [])][:1]
     base_hex = dom[0] if dom else "#cccccc"
     pattern = str(features.get("pattern", "solid"))
     texture = str(features.get("texture", "smooth"))
 
-    bottoms = ITEM_POOL["bottoms"]
-    shoes = ITEM_POOL["shoes"]
+    prefer_neutral_bottom = not _is_neutral_hex(base_hex) or pattern != "solid"
+    prefer_neutral_shoes = pattern != "solid"
 
-    prefer_neutral = _is_neutral_hex(base_hex) is False or "striped" in pattern or pattern == "checked" or pattern == "print"
+    if items_type in ("top", "outwear"):
+        bottoms = ITEM_POOL["bottoms"]
+        shoes = ITEM_POOL["shoes"]
+        candidates_b = [b for b in bottoms if (b["color"] in NEUTRALS) == prefer_neutral_bottom] or bottoms
+        candidates_s = shoes
 
-    candidate_bottoms = [b for b in bottoms if (b["color"] in NEUTRALS) == prefer_neutral]
-    if not candidate_bottoms:
-        candidate_bottoms = bottoms
-
-    if texture == "textured":
-        candidate_bottoms = [b for b in candidate_bottoms if b["texture"] == "smooth"] or candidate_bottoms
-
-    if pattern != "solid":
-        candidate_shoes = [s for s in shoes if s["color"] in ["white", "black"]]
+        b1, s1 = candidates_b[0], candidates_s[0]
+        b2, s2 = candidates_b[-1] if len(candidates_b) > 1 else candidates_b[0], candidates_s[-1] if len(candidates_s) > 1 else candidates_s[0]
+        acc = ITEM_POOL["accessories"]
+        return [
+            {"style": "feature_based_1", "bottom": b1, "shoes": s1, "palette": [base_hex, "#f5f5f5", "#111111"], "title": "Feature Pair A", "accessories": [acc[0], acc[2]]},
+            {"style": "feature_based_2", "bottom": b2, "shoes": s2, "palette": [base_hex, "#e0e0e0", "#333333"], "title": "Feature Pair B", "accessories": [acc[1], acc[3]]},
+        ]
+    elif items_type == "bottom":
+        tops = ITEM_POOL["tops"]
+        shoes = ITEM_POOL["shoes"]
+        return [
+            {"style": "feature_based_1", "top": tops[0], "shoes": shoes[0], "palette": [base_hex, "#f5f5f5", "#111111"], "title": "Feature Pair A", "accessories": []},
+            {"style": "feature_based_2", "top": tops[-1], "shoes": shoes[-1], "palette": [base_hex, "#e0e0e0", "#333333"], "title": "Feature Pair B", "accessories": []},
+        ]
+    elif items_type == "dress":
+        shoes = ITEM_POOL["shoes"]
+        outwear = ITEM_POOL["outwear"]
+        acc = ITEM_POOL["accessories"]
+        return [
+            {"style": "feature_based_1", "top": outwear[0], "shoes": shoes[0], "palette": [base_hex, "#f5f5f5", "#111111"], "title": "Layer Pair A", "accessories": [acc[0], acc[2]]},
+            {"style": "feature_based_2", "top": outwear[1], "shoes": shoes[1], "palette": [base_hex, "#e0e0e0", "#333333"], "title": "Layer Pair B", "accessories": [acc[1], acc[3]]},
+        ]
     else:
-        candidate_shoes = shoes
+        tops = ITEM_POOL["tops"]
+        bottoms = ITEM_POOL["bottoms"]
+        return [
+            {"style": "feature_based_1", "top": tops[0], "bottom": bottoms[0], "palette": [base_hex, "#f5f5f5", "#111111"], "title": "Feature Pair A", "accessories": []},
+            {"style": "feature_based_2", "top": tops[-1], "bottom": bottoms[-1], "palette": [base_hex, "#e0e0e0", "#333333"], "title": "Feature Pair B", "accessories": []},
+        ]
 
-    b1 = candidate_bottoms[0]
-    s1 = candidate_shoes[0]
-    b2 = candidate_bottoms[-1]
-    s2 = candidate_shoes[-1]
-    acc = ITEM_POOL["accessories"]
-    acc_a = [acc[0], acc[2]]
-    acc_b = [acc[1], acc[3]]
-    boards = [
-        {"style": "feature_based_1", "bottom": b1, "shoes": s1, "palette": [base_hex, "#f5f5f5", "#111111"], "title": "Feature Pair A", "accessories": acc_a},
-        {"style": "feature_based_2", "bottom": b2, "shoes": s2, "palette": [base_hex, "#e0e0e0", "#333333"], "title": "Feature Pair B", "accessories": acc_b},
-    ]
-    return boards
+
+def recommend_for_top(top_type: str) -> List[Board]:
+    styles = TYPE_TO_STYLES.get(top_type, ["minimal", "casual"])
+    boards: List[Board] = []
+    for style in styles[:2]:
+        catalog = STYLE_CATALOG.get(style)
+        if not catalog:
+            continue
+        bottom = catalog["bottoms"][0]
+        shoes = catalog["shoes"][0]
+        boards.append(
+            {
+                "style": style,
+                "bottom": bottom,
+                "shoes": shoes,
+                "palette": catalog["palette"],
+                "title": f"{style.replace('_', ' ').title()}",
+            }
+        )
+    return boards[:2]
 
 
 def recommend_from_features(item_type: str, features: Dict[str, object], image_path: Optional[str] = None) -> List[Board]:
-    # If we have a trained autoencoder and an uploaded image, use embedding similarity.
     if image_path:
         model, _ = _load_gallery_encoder()
         if model is not None:
@@ -279,13 +294,7 @@ def recommend_from_features(item_type: str, features: Dict[str, object], image_p
             if embedding is not None:
                 return recommend_from_embedding(item_type, embedding, features)
 
-    boards = _choose_bottom_and_shoes_from_features(features)
-    if item_type in ["bottom", "shoes"]:
-        tops = ITEM_POOL["tops"]
-        t1 = tops[0]
-        t2 = tops[-1]
-        boards[0]["top"] = t1
-        boards[1]["top"] = t2
+    boards = _choose_complementary(item_type, features)
     return boards
 
 
@@ -293,45 +302,50 @@ def recommend_from_embedding(item_type: str, embedding: np.ndarray, features: Di
     boards: List[Board] = []
     palette = features.get("dominant_colors", ["#ffffff", "#eeeeee", "#cccccc"])
 
-    if item_type == "top":
+    if item_type in ("top", "outwear"):
         bottoms = _find_best_items(embedding, ITEM_POOL["bottoms"], count=2)
         shoes = _find_best_items(embedding, ITEM_POOL["shoes"], count=2)
         for i in range(min(len(bottoms), len(shoes))):
-            boards.append(
-                {
-                    "style": f"similar_{i + 1}",
-                    "bottom": bottoms[i],
-                    "shoes": shoes[i],
-                    "palette": palette[:3],
-                    "title": f"Style Match {i + 1}",
-                }
-            )
+            boards.append({
+                "style": f"similar_{i + 1}",
+                "bottom": bottoms[i],
+                "shoes": shoes[i],
+                "palette": palette[:3],
+                "title": f"Style Match {i + 1}",
+            })
     elif item_type == "bottom":
         tops = _find_best_items(embedding, ITEM_POOL["tops"], count=2)
         shoes = _find_best_items(embedding, ITEM_POOL["shoes"], count=2)
         for i in range(min(len(tops), len(shoes))):
-            boards.append(
-                {
-                    "style": f"similar_{i + 1}",
-                    "top": tops[i],
-                    "shoes": shoes[i],
-                    "palette": palette[:3],
-                    "title": f"Style Match {i + 1}",
-                }
-            )
+            boards.append({
+                "style": f"similar_{i + 1}",
+                "top": tops[i],
+                "shoes": shoes[i],
+                "palette": palette[:3],
+                "title": f"Style Match {i + 1}",
+            })
+    elif item_type == "dress":
+        outwear = _find_best_items(embedding, ITEM_POOL["outwear"], count=2)
+        shoes = _find_best_items(embedding, ITEM_POOL["shoes"], count=2)
+        for i in range(min(len(outwear), len(shoes))):
+            boards.append({
+                "style": f"similar_{i + 1}",
+                "top": outwear[i],
+                "shoes": shoes[i],
+                "palette": palette[:3],
+                "title": f"Style Match {i + 1}",
+            })
     elif item_type == "shoes":
         tops = _find_best_items(embedding, ITEM_POOL["tops"], count=2)
         bottoms = _find_best_items(embedding, ITEM_POOL["bottoms"], count=2)
         for i in range(min(len(tops), len(bottoms))):
-            boards.append(
-                {
-                    "style": f"similar_{i + 1}",
-                    "top": tops[i],
-                    "bottom": bottoms[i],
-                    "palette": palette[:3],
-                    "title": f"Style Match {i + 1}",
-                }
-            )
+            boards.append({
+                "style": f"similar_{i + 1}",
+                "top": tops[i],
+                "bottom": bottoms[i],
+                "palette": palette[:3],
+                "title": f"Style Match {i + 1}",
+            })
     if not boards:
-        return _choose_bottom_and_shoes_from_features(features)
+        return _choose_complementary(item_type, features)
     return boards[:2]

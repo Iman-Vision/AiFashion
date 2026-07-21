@@ -10,24 +10,41 @@
   <div class="container narrow">
     <div class="topbar">
       <a class="btn" href="{{ url_for('index') }}">← Back</a>
-      <div class="title">Detected: {{ uploaded_type|title }}</div>
+      <div class="title">Detected: {{ uploaded_label or uploaded_type|title }}</div>
     </div>
+    {% if features %}
+    <div class="features-bar">
+      <span class="feat">Pattern: {{ features.pattern }}</span>
+      <span class="feat">Texture: {{ features.texture }}</span>
+      {% if features.dominant_colors %}
+      <span class="feat">Colors:
+        {% for c in features.dominant_colors %}<span class="mini-swatch" style="background:{{ c }}"></span>{% endfor %}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
     {% for b in boards %}
     <section class="canvas">
       {% set pal = (b.palette or []) + ['#ddd', '#eee', '#ccc'] %}
       <div class="canvas-title">{{ b.title }}</div>
+      {% if b.top %}
       <figure class="piece p-top">
-        <img src="{% if uploaded_type=='top' %}{{ uploaded_image }}{% else %}{{ (b.top and b.top.image) or uploaded_image }}{% endif %}" alt="Top">
-        <figcaption class="cap">{{ (b.top and b.top.name) or 'Top' }}</figcaption>
+        <img src="{% if uploaded_type in ('top', 'outwear') %}{{ uploaded_image }}{% else %}{{ b.top.image }}{% endif %}" alt="Top">
+        <figcaption class="cap">{% if uploaded_type in ('top', 'outwear') %}{{ uploaded_label or 'Top' }}{% else %}{{ b.top.name }}{% endif %}</figcaption>
       </figure>
+      {% endif %}
+      {% if b.bottom %}
       <figure class="piece p-bottom">
         <img src="{% if uploaded_type=='bottom' %}{{ uploaded_image }}{% else %}{{ b.bottom.image }}{% endif %}" alt="Bottom">
-        <figcaption class="cap">{{ b.bottom.name }}</figcaption>
+        <figcaption class="cap">{% if uploaded_type=='bottom' %}{{ uploaded_label or 'Bottom' }}{% else %}{{ b.bottom.name }}{% endif %}</figcaption>
       </figure>
+      {% endif %}
+      {% if b.shoes %}
       <figure class="piece p-shoes">
         <img src="{% if uploaded_type=='shoes' %}{{ uploaded_image }}{% else %}{{ b.shoes.image }}{% endif %}" alt="Shoes">
-        <figcaption class="cap">{{ b.shoes.name }}</figcaption>
+        <figcaption class="cap">{% if uploaded_type=='shoes' %}{{ uploaded_label or 'Shoes' }}{% else %}{{ b.shoes.name }}{% endif %}</figcaption>
       </figure>
+      {% endif %}
       {% if b.accessories %}
       <div class="acc a1">
         <img src="{{ b.accessories[0].image }}" alt="{{ b.accessories[0].name }}">
