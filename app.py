@@ -54,7 +54,7 @@ def analyze():
         detected = detect_item_type(saved_path)
 
     feats = analyze_image(saved_path)
-    boards = recommend_from_features(detected, feats, saved_path)
+    boards = recommend_from_features(detected, feats)
     image_url = url_for("uploads", filename=Path(saved_path).name)
 
     display_type = {

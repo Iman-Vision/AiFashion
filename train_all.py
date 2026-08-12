@@ -5,30 +5,26 @@ Usage:
     # Step 1: Prepare DeepFashion2 data (after extracting the encrypted zips)
     python prepare_data.py --data-dir data/validation --output-dir dataset --augment
 
-    # Step 2: Train both models
-    python train_all.py --data-dir dataset --epochs-autoencoder 20 --epochs-classifier 15
+    # Step 2: Train the classifier
+    python train_all.py --data-dir dataset --epochs-classifier 15
 
     # Quick train with fewer samples
-    python train_all.py --data-dir dataset --max-samples 5000 --epochs-autoencoder 10 --epochs-classifier 10
+    python train_all.py --data-dir dataset --max-samples 5000 --epochs-classifier 10
 """
 import argparse
 import sys
-import os
 from pathlib import Path
 
-os.environ.setdefault("KERAS_BACKEND", "torch")
 sys.path.insert(0, str(Path(__file__).parent))
 
 
 def main():
     parser = argparse.ArgumentParser(description="Train AI Fashion models on DeepFashion2")
     parser.add_argument("--data-dir", default="dataset", help="Directory with category subfolders (from prepare_data.py)")
-    parser.add_argument("--epochs-autoencoder", type=int, default=20, help="Autoencoder training epochs")
     parser.add_argument("--epochs-classifier", type=int, default=15, help="Classifier training epochs")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--max-samples", type=int, default=0, help="Limit total training samples (0=unlimited)")
-    parser.add_argument("--skip-autoencoder", action="store_true", help="Skip autoencoder training")
     parser.add_argument("--skip-classifier", action="store_true", help="Skip classifier training")
     parser.add_argument("--full-categories", action="store_true", help="Use all 13 DeepFashion2 categories")
     args = parser.parse_args()
@@ -52,18 +48,6 @@ def main():
     if args.max_samples > 0:
         print(f"Limiting to {args.max_samples} samples per category")
 
-    if not args.skip_autoencoder:
-        print("\n" + "=" * 60)
-        print("Training Autoencoder (fashion embedding model)")
-        print("=" * 60)
-        from ai_fashion.autoencoder import train_autoencoder
-        train_autoencoder(
-            data_dir=str(data_dir),
-            epochs=args.epochs_autoencoder,
-            batch_size=args.batch_size,
-            learning_rate=args.lr,
-        )
-
     if not args.skip_classifier:
         print("\n" + "=" * 60)
         print("Training Clothing Classifier")
@@ -86,7 +70,6 @@ def main():
     print("\n" + "=" * 60)
     print("Training complete!")
     print("Models saved to: models/")
-    print("  - autoencoder.keras (Transformer fashion embedding model)")
     print("  - clothing_classifier.pt (item type classifier)")
     print("=" * 60)
 

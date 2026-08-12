@@ -3,11 +3,59 @@ import urllib.request
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import numpy as np
+
 try:
     from PIL import Image, ImageFilter
 except Exception:
     Image = None  # type: ignore
     ImageFilter = None  # type: ignore
+
+PATTERNS = ["solid", "checked", "striped_vertical", "striped_horizontal", "print"]
+TEXTURES = ["smooth", "textured"]
+
+# Named colors used across the catalog/pool, mapped to hex for vectorizing.
+COLOR_NAME_TO_HEX = {
+    "white": "#ffffff", "black": "#111111", "grey": "#808080", "gray": "#808080",
+    "khaki": "#c3b091", "beige": "#e8dcc8", "navy": "#1d3557", "blue": "#3a6ea5",
+    "olive": "#708238", "brown": "#6f4e37", "tan": "#d2b48c", "cream": "#f2e8d5",
+    "nude": "#e3bc9a", "camel": "#c19a6b", "neon": "#39ff14", "multi": "#999999",
+    "indigo": "#4b3f72", "lightblue": "#add8e6", "silver": "#c0c0c0", "red": "#c0392b",
+    "green": "#2e7d32", "pink": "#e75480", "purple": "#6a0dad", "yellow": "#f1c40f",
+    "orange": "#e67e22", "gold": "#d4af37",
+}
+
+
+def color_name_to_hex(name: str) -> str:
+    return COLOR_NAME_TO_HEX.get(str(name).lower(), "#999999")
+
+
+def _hex_to_rgb01(hex_color: str) -> Tuple[float, float, float]:
+    c = hex_color.lstrip("#")
+    if len(c) != 6:
+        return (0.6, 0.6, 0.6)
+    r = int(c[0:2], 16) / 255.0
+    g = int(c[2:4], 16) / 255.0
+    b = int(c[4:6], 16) / 255.0
+    return (r, g, b)
+
+
+def feature_vector(color_hex: str, pattern: str = "solid", texture: str = "smooth") -> np.ndarray:
+    """Handcrafted feature vector: RGB + one-hot pattern + one-hot texture."""
+    r, g, b = _hex_to_rgb01(color_hex)
+    pattern_vec = [1.0 if pattern == p else 0.0 for p in PATTERNS]
+    texture_vec = [1.0 if texture == t else 0.0 for t in TEXTURES]
+    return np.array([r, g, b, *pattern_vec, *texture_vec], dtype=np.float64)
+
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    if a is None or b is None:
+        return -1.0
+    a_norm = np.linalg.norm(a)
+    b_norm = np.linalg.norm(b)
+    if a_norm == 0 or b_norm == 0:
+        return -1.0
+    return float(np.dot(a, b) / (a_norm * b_norm))
 
 
 def _open_image(path_or_url: str):
