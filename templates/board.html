@@ -35,8 +35,8 @@
       {% endif %}
       {% if b.bottom %}
       <figure class="piece p-bottom">
-        <img src="{% if uploaded_type=='bottom' %}{{ uploaded_image }}{% else %}{{ b.bottom.image }}{% endif %}" alt="Bottom">
-        <figcaption class="cap">{% if uploaded_type=='bottom' %}{{ uploaded_label or 'Bottom' }}{% else %}{{ b.bottom.name }}{% endif %}</figcaption>
+        <img src="{% if uploaded_type in ('bottom', 'dress') %}{{ uploaded_image }}{% else %}{{ b.bottom.image }}{% endif %}" alt="Bottom">
+        <figcaption class="cap">{% if uploaded_type in ('bottom', 'dress') %}{{ uploaded_label or 'Bottom' }}{% else %}{{ b.bottom.name }}{% endif %}</figcaption>
       </figure>
       {% endif %}
       {% if b.shoes %}

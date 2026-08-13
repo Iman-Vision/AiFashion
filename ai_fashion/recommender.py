@@ -1,8 +1,13 @@
+import json
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 
 from ai_fashion.analyzer import color_name_to_hex, cosine_similarity, feature_vector
+
+BASE_DIR = Path(__file__).parent.parent
+GALLERY_INDEX_PATH = BASE_DIR / "models" / "gallery_index.json"
 
 
 Item = Dict[str, str]
@@ -115,12 +120,15 @@ _item_vectors: Dict[str, np.ndarray] = {}
 def _item_vector(item: Item) -> np.ndarray:
     key = item["image"]
     if key not in _item_vectors:
-        hex_color = color_name_to_hex(item.get("color", ""))
-        _item_vectors[key] = feature_vector(
-            hex_color,
-            item.get("pattern", "solid"),
-            item.get("texture", "smooth"),
-        )
+        if "vector" in item:
+            _item_vectors[key] = np.array(item["vector"], dtype=np.float64)
+        else:
+            hex_color = color_name_to_hex(item.get("color", ""))
+            _item_vectors[key] = feature_vector(
+                hex_color,
+                item.get("pattern", "solid"),
+                item.get("texture", "smooth"),
+            )
     return _item_vectors[key]
 
 
@@ -130,7 +138,9 @@ def _find_best_items(target_vector: np.ndarray, candidates: List[Item], count: i
     return [item for _, item in scored[:count]]
 
 
-ITEM_POOL = {
+# Used only if models/gallery_index.json hasn't been built yet
+# (run `python build_gallery_index.py` to generate it from Re-PolyVore).
+_FALLBACK_ITEM_POOL = {
     "tops": [
         {"name": "White Shirt", "color": "white", "image": "https://images.unsplash.com/photo-1520975698519-59c03d604b8b?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
         {"name": "Black Tee", "color": "black", "image": "https://images.unsplash.com/photo-1534759846116-579bd379706c?q=80&w=800&auto=format&fit=crop", "pattern": "solid", "texture": "smooth"},
@@ -166,6 +176,21 @@ ITEM_POOL = {
 }
 
 
+def _load_item_pool() -> Dict[str, List[Item]]:
+    if GALLERY_INDEX_PATH.exists():
+        try:
+            with open(GALLERY_INDEX_PATH, "r", encoding="utf-8") as f:
+                pool = json.load(f)
+            if all(pool.get(slot) for slot in ("tops", "bottoms", "shoes", "accessories")):
+                return pool
+        except Exception:
+            pass
+    return _FALLBACK_ITEM_POOL
+
+
+ITEM_POOL = _load_item_pool()
+
+
 def recommend_for_top(top_type: str) -> List[Board]:
     styles = TYPE_TO_STYLES.get(top_type, ["minimal", "casual"])
     boards: List[Board] = []
@@ -193,6 +218,13 @@ def _accessory_pairs(target_vector: np.ndarray) -> Tuple[List[Item], List[Item]]
     all get a chance to appear across the two boards."""
     ranked = _find_best_items(target_vector, ITEM_POOL["accessories"], count=4)
     return ranked[0:2], ranked[2:4]
+
+
+# Which board slot the uploaded item itself occupies. The board only ever
+# contains the *complementary* pool items, so the uploaded item's own slot
+# has to be added separately or the template has nothing to swap its image
+# into. A dress has no dedicated card, so it borrows the "bottom" slot.
+_UPLOADED_SLOT = {"top": "top", "outwear": "top", "bottom": "bottom", "dress": "bottom", "shoes": "shoes"}
 
 
 def recommend_from_features(item_type: str, features: Dict[str, object]) -> List[Board]:
@@ -257,5 +289,10 @@ def recommend_from_features(item_type: str, features: Dict[str, object]) -> List
                 "title": f"Style Match {i + 1}",
                 "accessories": acc_pair_1 if i == 0 else acc_pair_2,
             })
+
+    uploaded_slot = _UPLOADED_SLOT.get(item_type)
+    if uploaded_slot:
+        for b in boards:
+            b[uploaded_slot] = {"name": None, "image": None}
 
     return boards[:2]

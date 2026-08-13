@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 
+BASE_DIR = Path(__file__).parent.parent
+GALLERY_DIR = BASE_DIR / "Re-PolyVore" / "Re-PolyVore" / "Re-PolyVore"
+
 
 def _html_img(src: str, alt: str, cls: str = "") -> str:
     return f'<img class="{cls}" src="{src}" alt="{alt}"/>'
@@ -9,6 +12,10 @@ def _html_img(src: str, alt: str, cls: str = "") -> str:
 def _resolve_src(image: str, local_top: Optional[str]) -> str:
     if image.startswith("http://") or image.startswith("https://") or image.startswith("data:"):
         return image
+    if image.startswith("/gallery/"):
+        p = GALLERY_DIR / image[len("/gallery/"):]
+        if p.exists():
+            return p.resolve().as_uri()
     if local_top and Path(local_top).exists():
         p = Path(local_top).resolve().as_uri()
         return p

@@ -44,11 +44,12 @@ def _get_classifier():
     return _classifier, _classifier_transform
 
 
-# Fallback: ImageNet classes mapped to fashion categories
+# Fallback: ImageNet classes mapped to the app's canonical categories
+# (top, outwear, bottom, dress, shoes) — must match CATEGORY_LABELS.
 FASHION_MAPPING = {
-    608: "jacket", 617: "jacket",
-    459: "shirt", 600: "shirt", 701: "shirt",
-    841: "tshirt", 610: "shirt",
+    608: "outwear", 617: "outwear",
+    459: "top", 600: "top", 701: "top",
+    841: "top", 610: "top",
     603: "bottom", 845: "bottom",
     770: "shoes", 626: "shoes", 514: "shoes", 452: "shoes", 802: "shoes", 931: "shoes",
 }

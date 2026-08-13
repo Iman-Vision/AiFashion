@@ -12,6 +12,7 @@ from ai_fashion.recommender import recommend_from_features
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+GALLERY_DIR = BASE_DIR / "Re-PolyVore" / "Re-PolyVore" / "Re-PolyVore"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -24,6 +25,11 @@ def index():
 @app.route("/uploads/<path:filename>")
 def uploads(filename):
     return send_from_directory(UPLOAD_DIR, filename, as_attachment=False)
+
+
+@app.route("/gallery/<path:relpath>")
+def gallery(relpath):
+    return send_from_directory(GALLERY_DIR, relpath, as_attachment=False)
 
 
 @app.route("/analyze", methods=["POST"])

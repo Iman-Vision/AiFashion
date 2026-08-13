@@ -16,13 +16,11 @@ MODEL_DIR = BASE_DIR / "models"
 CLASSIFIER_PATH = MODEL_DIR / "clothing_classifier.pt"
 IMAGE_SIZE = 224
 
-# DeepFashion2 super-categories used by the app
-CATEGORY_LABELS = [
-    "top",        # short_sleeve_top, long_sleeve_top, vest, sling
-    "outwear",    # short_sleeve_outwear, long_sleeve_outwear
-    "bottom",     # shorts, trousers, skirt
-    "dress",      # short_sleeve_dress, long_sleeve_dress, vest_dress, sling_dress
-]
+# Super-categories used by the app. Kept alphabetically sorted on purpose:
+# ImageFolder assigns class indices by sorted folder name, so training and
+# inference only agree on which index means what if this list is sorted
+# the same way the dataset folders are.
+CATEGORY_LABELS = sorted(["top", "outwear", "bottom", "dress", "shoes"])
 
 # Full 13-category labels for finer classification
 FULL_CATEGORY_LABELS = [
@@ -56,7 +54,10 @@ class ClothingClassifier(nn.Module):
         else:
             self.backbone = mobilenet_v3_small(weights=None)
 
-        in_features = self.backbone.classifier[3].in_features
+        # classifier[0] is the Linear taking the backbone's pooled features
+        # (576-d for mobilenet_v3_small) — we replace the whole classifier
+        # Sequential, so we need its *input* size, not classifier[3]'s.
+        in_features = self.backbone.classifier[0].in_features
         self.backbone.classifier = nn.Sequential(
             nn.Linear(in_features, 256),
             nn.Hardswish(inplace=True),

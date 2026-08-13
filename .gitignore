@@ -6,7 +6,8 @@ venv/
 vscode/
 .DS_Store
 Re-PolyVore/
-
+dataset/
+uploads/
 # Results
 results/comparisons/*.png
 results/metrics_summary.csv
