@@ -37,8 +37,8 @@ body.bg{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system
 /* Canvas collage */
 .canvas{position:relative;background:var(--card);border:1px solid var(--border);border-radius:18px;min-height:680px;box-shadow:0 24px 48px rgba(0,0,0,.08);padding:24px;overflow:hidden;margin-bottom:28px}
 .canvas-title{position:absolute;top:18px;left:24px;font-weight:800;letter-spacing:.5px;color:#111827}
-.piece{position:absolute;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 16px 36px rgba(0,0,0,.12);overflow:hidden;transform:rotate(-0.4deg)}
-.piece img{display:block;width:100%;height:100%;object-fit:cover}
+.piece{position:absolute;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 16px 36px rgba(0,0,0,.12);overflow:hidden;transform:rotate(-0.4deg)}
+.piece img{display:block;width:100%;height:100%;object-fit:contain}
 .cap{position:absolute;bottom:8px;left:10px;background:rgba(255,255,255,.86);padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-size:12px}
 /* positions for collage */
 .p-top{top:78px;left:48px;width:420px;height:460px;transform:rotate(-0.6deg)}
@@ -51,7 +51,7 @@ body.bg{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system
 
 /* accessories */
 .acc{position:absolute;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 12px 28px rgba(0,0,0,.08);overflow:hidden}
-.acc img{display:block;width:100%;height:100%;object-fit:cover}
+.acc img{display:block;width:100%;height:100%;object-fit:contain}
 .a1{top:420px;right:36px;width:120px;height:120px;transform:rotate(1deg)}
 .a2{top:520px;right:156px;width:120px;height:120px;transform:rotate(-0.8deg)}
 
