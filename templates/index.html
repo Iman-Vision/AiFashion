@@ -60,32 +60,80 @@
     const drop = document.getElementById('drop');
     const themeFloating = document.getElementById('themeFloating');
     let stream = null;
+    let selectedFiles = []; // our own source of truth — native FileList can't be edited in place
+    let cameraCapture = null; // dataURL string, or null
+
     function updateSubmit() {
-      submitBtn.disabled = !(hidden.value || (file && file.files && file.files.length));
+      submitBtn.disabled = !(cameraCapture || selectedFiles.length);
     }
-    function renderPreviews(fileList) {
+
+    function syncFileInput() {
+      const dt = new DataTransfer();
+      selectedFiles.forEach(f => dt.items.add(f));
+      file.files = dt.files;
+    }
+
+    function renderPreviews() {
       previewList.innerHTML = '';
-      Array.from(fileList).slice(0, 3).forEach(f => {
+      selectedFiles.forEach((f, i) => {
+        const card = document.createElement('div');
+        card.className = 'preview-item';
         const img = document.createElement('img');
         img.src = URL.createObjectURL(f);
         img.alt = f.name;
-        previewList.appendChild(img);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'preview-remove';
+        remove.setAttribute('aria-label', 'Remove ' + f.name);
+        remove.textContent = '×';
+        remove.addEventListener('click', () => {
+          selectedFiles.splice(i, 1);
+          syncFileInput();
+          renderPreviews();
+          updateSubmit();
+        });
+        card.appendChild(img);
+        card.appendChild(remove);
+        previewList.appendChild(card);
       });
-    }
-    file.addEventListener('change', () => {
-      if (file.files && file.files.length) {
-        renderPreviews(file.files);
-        updateSubmit();
+      if (cameraCapture) {
+        const card = document.createElement('div');
+        card.className = 'preview-item';
+        const img = document.createElement('img');
+        img.src = cameraCapture;
+        img.alt = 'camera capture';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'preview-remove';
+        remove.setAttribute('aria-label', 'Remove camera capture');
+        remove.textContent = '×';
+        remove.addEventListener('click', () => {
+          cameraCapture = null;
+          hidden.value = '';
+          renderPreviews();
+          updateSubmit();
+        });
+        card.appendChild(img);
+        card.appendChild(remove);
+        previewList.appendChild(card);
       }
+    }
+
+    function addFiles(fileList) {
+      const room = Math.max(0, 3 - selectedFiles.length);
+      Array.from(fileList).slice(0, room).forEach(f => selectedFiles.push(f));
+      syncFileInput();
+      renderPreviews();
+      updateSubmit();
+    }
+
+    file.addEventListener('change', () => {
+      if (file.files && file.files.length) addFiles(file.files);
     });
     ;['dragenter','dragover','dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation();}));
     drop.addEventListener('drop', e=>{
       const dt = e.dataTransfer;
-      if (dt && dt.files && dt.files.length) {
-        file.files = dt.files;
-        renderPreviews(dt.files);
-        updateSubmit();
-      }
+      if (dt && dt.files && dt.files.length) addFiles(dt.files);
     });
     startBtn.addEventListener('click', async () => {
       try {
@@ -101,11 +149,9 @@
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       ctx.drawImage(video, 0, 0);
-      hidden.value = canvas.toDataURL('image/png');
-      const img = document.createElement('img');
-      img.src = hidden.value;
-      img.alt = 'camera capture';
-      previewList.appendChild(img);
+      cameraCapture = canvas.toDataURL('image/png');
+      hidden.value = cameraCapture;
+      renderPreviews();
       updateSubmit();
     });
     function applyTheme() {

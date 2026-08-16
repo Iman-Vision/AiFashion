@@ -178,11 +178,42 @@ def _load_item_pool() -> Dict[str, List[Item]]:
 ITEM_POOL = _load_item_pool()
 
 
-def accessory_options(target_vector: np.ndarray, count: int = 6) -> List[Item]:
-    """Rank accessories by cosine similarity to a look's target vector.
-    Accessories are opt-in — this is only called when the user explicitly
-    asks to see what jewelry/bags/watches would go with a board."""
-    return _find_best_items(target_vector, ITEM_POOL["accessories"], count=count)
+# Below this cosine-similarity-to-the-actual-board-pieces score, an optional
+# addition (outwear especially) reads as "doesn't really go" rather than
+# "completes the look" — used to gate whether it's allowed onto the board
+# itself or only offered as a loose suggestion.
+FIT_THRESHOLD = 0.55
+
+
+def suggest_additions(category: str, context_vectors: List[np.ndarray], count: int = 8) -> List[Dict[str, object]]:
+    """Rank optional add-ons (an outwear layer, or an accessory category)
+    against the pieces already on the board — not just the single uploaded
+    item — so "fits" reflects the whole look, not one piece of it.
+    `category` is '' / 'all' for every accessory, an accessory sub-category
+    (e.g. 'jewelry'), or 'outwear'."""
+    if category == "outwear":
+        candidates = ITEM_POOL["outwear"]
+    else:
+        candidates = ITEM_POOL["accessories"]
+        if category and category != "all":
+            candidates = [c for c in candidates if c.get("category") == category]
+
+    results = []
+    for item in candidates:
+        vec = _item_vector(item)
+        score = (
+            sum(cosine_similarity(vec, cv) for cv in context_vectors) / len(context_vectors)
+            if context_vectors else 0.0
+        )
+        results.append({
+            "name": item["name"],
+            "image": item["image"],
+            "category": item.get("category", "outwear" if category == "outwear" else ""),
+            "score": round(score, 3),
+            "fits": score >= FIT_THRESHOLD,
+        })
+    results.sort(key=lambda r: r["score"], reverse=True)
+    return results[:count]
 
 
 def _combo_score(target_vector: np.ndarray, items: List[Item]) -> float:

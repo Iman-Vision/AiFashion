@@ -33,17 +33,31 @@ def _hex_to_rgb01(hex_color: str) -> Tuple[float, float, float]:
 _COLOR_WEIGHT = 4.0
 _PATTERN_WEIGHT = 0.5
 _TEXTURE_WEIGHT = 0.5
+# Deliberately strong: this is what stops "sneakers with a skirt, heels
+# with jeans" — casual/dressy agreement between an outfit's pieces matters
+# more to whether it reads as a coherent look than color alone does.
+_FORMALITY_WEIGHT = 2.5
 
 
-def feature_vector(color_hex: str, pattern: str = "solid", texture: str = "smooth") -> np.ndarray:
-    """Handcrafted feature vector: weighted RGB + one-hot pattern + one-hot texture."""
+def formality_vec(formality: str) -> List[float]:
+    if formality == "casual":
+        return [1.0, 0.0]
+    if formality == "dressy":
+        return [0.0, 1.0]
+    return [0.5, 0.5]  # neutral / unknown — doesn't pull matching either way
+
+
+def feature_vector(color_hex: str, pattern: str = "solid", texture: str = "smooth", formality: str = "neutral") -> np.ndarray:
+    """Handcrafted feature vector: weighted RGB + one-hot pattern + one-hot
+    texture + casual/dressy formality."""
     r, g, b = _hex_to_rgb01(color_hex)
     pattern_vec = [1.0 if pattern == p else 0.0 for p in PATTERNS]
     texture_vec = [1.0 if texture == t else 0.0 for t in TEXTURES]
     return np.array(
         [r * _COLOR_WEIGHT, g * _COLOR_WEIGHT, b * _COLOR_WEIGHT]
         + [v * _PATTERN_WEIGHT for v in pattern_vec]
-        + [v * _TEXTURE_WEIGHT for v in texture_vec],
+        + [v * _TEXTURE_WEIGHT for v in texture_vec]
+        + [v * _FORMALITY_WEIGHT for v in formality_vec(formality)],
         dtype=np.float64,
     )
 
@@ -195,6 +209,52 @@ def analyze_image(path_or_url: str) -> Dict[str, object]:
         "pattern": pattern,
         "texture": texture,
     }
+
+
+def estimate_shoe_formality(img) -> str:
+    """Coarse heel-vs-flat heuristic from silhouette alone (Re-PolyVore's
+    shoes folder has no sneaker/heel labels to draw on). Heels are shot
+    tall and narrow with weight concentrated under a thin heel post;
+    sneakers/flats are wider and flat-soled, spreading mass across the
+    whole bottom edge. Not precise, but far better than treating every
+    shoe as formality-neutral."""
+    gray = img.convert("L")
+    edges = gray.filter(ImageFilter.FIND_EDGES) if ImageFilter is not None else gray
+    s = 64
+    small = edges.resize((s, s))
+    px = small.load()
+
+    bottom_y0 = int(s * 0.85)
+    cx0, cx1 = int(s * 0.4), int(s * 0.6)
+
+    def region_avg(x0, x1, y0, y1):
+        total = sum(px[x, y] for y in range(y0, y1) for x in range(x0, x1))
+        area = max(1, (x1 - x0) * (y1 - y0))
+        return total / area
+
+    center_avg = region_avg(cx0, cx1, bottom_y0, s)
+    left_avg = region_avg(0, cx0, bottom_y0, s)
+    right_avg = region_avg(cx1, s, bottom_y0, s)
+    outer_avg = (left_avg + right_avg) / 2.0
+
+    w, h = img.size
+    aspect = h / max(1, w)
+
+    narrow_heel_signal = center_avg > outer_avg * 1.25
+    tall_signal = aspect > 1.15
+    return "dressy" if (narrow_heel_signal or tall_signal) else "casual"
+
+
+def infer_formality(category: str, img=None) -> str:
+    """Best-effort casual/dressy tag used to build the gallery index.
+    'category' is the Re-PolyVore source folder name."""
+    if category == "pants":
+        return "casual"
+    if category == "skirt":
+        return "dressy"
+    if category == "shoes" and img is not None:
+        return estimate_shoe_formality(img)
+    return "neutral"
 
 
 def detect_item_type(path_or_url: str) -> str:

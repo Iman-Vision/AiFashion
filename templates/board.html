@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="canvas-bg">
-  <div class="container narrow">
+  <div class="container wide">
     <div class="topbar">
       <a class="btn" href="{{ url_for('index') }}">← Back</a>
       <div class="title">Detected: {{ uploaded_label }}</div>
@@ -23,80 +23,169 @@
       {% endif %}
     </div>
     {% endif %}
-    {% for b in boards %}
-    <section class="canvas">
-      {% set pal = (b.palette or []) + ['#ddd', '#eee', '#ccc'] %}
-      <div class="canvas-title">{{ b.title }}</div>
-      {% if b.top %}
-      <figure class="piece p-top">
-        <img src="{{ b.top.image }}" alt="Top">
-        <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
-      </figure>
-      {% endif %}
-      {% if b.bottom %}
-      <figure class="piece p-bottom">
-        <img src="{{ b.bottom.image }}" alt="Bottom">
-        <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
-      </figure>
-      {% endif %}
-      {% if b.shoes %}
-      <figure class="piece p-shoes">
-        <img src="{{ b.shoes.image }}" alt="Shoes">
-        <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
-      </figure>
-      {% endif %}
-      {% if b.outwear %}
-      <figure class="piece p-outwear">
-        <img src="{{ b.outwear.image }}" alt="Outwear">
-        <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
-      </figure>
-      {% endif %}
-      <div class="swatch s1" data-color="{{ pal[0] }}"></div>
-      <div class="swatch s2" data-color="{{ pal[1] }}"></div>
-      <div class="swatch s3" data-color="{{ pal[2] }}"></div>
-    </section>
-    {% endfor %}
 
-    <section class="accessorize">
-      <button type="button" id="accessorizeBtn" class="btn">+ Add accessories (jewelry, bags, watches...)</button>
-      <div id="accessoryGrid" class="accessory-grid" style="display:none"></div>
-    </section>
+    <div class="board-layout">
+      <div class="board-main">
+        {% for b in boards %}
+        <section class="canvas" {% if loop.first %}id="primaryCanvas"{% endif %}>
+          {% set pal = (b.palette or []) + ['#ddd', '#eee', '#ccc'] %}
+          <div class="canvas-title">{{ b.title }}</div>
+          {% if b.top %}
+          <figure class="piece p-top">
+            <img src="{{ b.top.image }}" alt="Top">
+            <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
+          </figure>
+          {% endif %}
+          {% if b.bottom %}
+          <figure class="piece p-bottom">
+            <img src="{{ b.bottom.image }}" alt="Bottom">
+            <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
+          </figure>
+          {% endif %}
+          {% if b.shoes %}
+          <figure class="piece p-shoes">
+            <img src="{{ b.shoes.image }}" alt="Shoes">
+            <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
+          </figure>
+          {% endif %}
+          {% if b.outwear %}
+          <figure class="piece p-outwear">
+            <img src="{{ b.outwear.image }}" alt="Outwear">
+            <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
+          </figure>
+          {% endif %}
+          <div class="swatch s1" data-color="{{ pal[0] }}"></div>
+          <div class="swatch s2" data-color="{{ pal[1] }}"></div>
+          <div class="swatch s3" data-color="{{ pal[2] }}"></div>
+        </section>
+        {% endfor %}
+      </div>
+
+      <aside class="sidebar">
+        <h2>Complete the look</h2>
+        <p class="sidebar-hint">Pick a category, see what actually matches this outfit, then decide what to add.</p>
+        <select id="suggestCategory" class="select">
+          <option value="">All accessories</option>
+          <option value="jewelry">Jewelry</option>
+          <option value="bag">Bags</option>
+          <option value="glasses">Glasses</option>
+          <option value="watch">Watches</option>
+          <option value="hats">Hats</option>
+          <option value="accessory">Other accessories</option>
+          <option value="outwear">Outwear layer</option>
+        </select>
+        <button type="button" id="findMatchesBtn" class="btn primary full">Find Matches</button>
+        <div id="suggestResults" class="suggest-results"></div>
+
+        <div id="addedSection" class="added-section" style="display:none">
+          <h3>Added to your look</h3>
+          <div id="addedStrip" class="added-strip"></div>
+        </div>
+      </aside>
+    </div>
   </div>
   <button type="button" id="themeFloating" class="theme-toggle" aria-label="Toggle theme">
     <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
   </button>
   <script>
-    const accessorizeBtn = document.getElementById('accessorizeBtn');
-    const accessoryGrid = document.getElementById('accessoryGrid');
-    const targetVector = {{ (target_vector or '[]') | safe }};
-    accessorizeBtn.addEventListener('click', async () => {
-      accessorizeBtn.disabled = true;
-      accessorizeBtn.textContent = 'Finding matches...';
-      try {
-        const body = new URLSearchParams({ target_vector: JSON.stringify(targetVector) });
-        const res = await fetch('{{ url_for("accessorize") }}', { method: 'POST', body });
-        const items = await res.json();
-        accessoryGrid.innerHTML = '';
-        items.forEach(it => {
-          const card = document.createElement('div');
-          card.className = 'accessory-card';
-          const img = document.createElement('img');
-          img.src = it.image;
-          img.alt = it.name;
-          const label = document.createElement('div');
-          label.className = 'accessory-label';
-          label.textContent = it.category ? `${it.name} · ${it.category}` : it.name;
-          card.appendChild(img);
-          card.appendChild(label);
-          accessoryGrid.appendChild(card);
+    const findMatchesBtn = document.getElementById('findMatchesBtn');
+    const suggestCategory = document.getElementById('suggestCategory');
+    const suggestResults = document.getElementById('suggestResults');
+    const addedSection = document.getElementById('addedSection');
+    const addedStrip = document.getElementById('addedStrip');
+    const contextVectors = {{ (context_vectors or '[]') | safe }};
+
+    function addToAddedStrip(item) {
+      addedSection.style.display = 'block';
+      const card = document.createElement('div');
+      card.className = 'added-card';
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = item.name;
+      const label = document.createElement('div');
+      label.className = 'added-label';
+      label.textContent = item.name;
+      card.appendChild(img);
+      card.appendChild(label);
+      addedStrip.appendChild(card);
+    }
+
+    function addOutwearToBoard(item) {
+      const canvas = document.getElementById('primaryCanvas');
+      if (!canvas) { addToAddedStrip(item); return; }
+      let figure = canvas.querySelector('.p-outwear');
+      if (!figure) {
+        figure = document.createElement('figure');
+        figure.className = 'piece p-outwear';
+        const img = document.createElement('img');
+        const cap = document.createElement('figcaption');
+        cap.className = 'cap';
+        figure.appendChild(img);
+        figure.appendChild(cap);
+        canvas.appendChild(figure);
+      }
+      figure.querySelector('img').src = item.image;
+      figure.querySelector('img').alt = item.name;
+      figure.querySelector('figcaption').textContent = item.name;
+    }
+
+    function renderResults(items, category) {
+      suggestResults.innerHTML = '';
+      if (!items.length) {
+        suggestResults.innerHTML = '<div class="sidebar-hint">No matches found.</div>';
+        return;
+      }
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'suggest-card' + (item.fits ? ' fits' : '');
+        const img = document.createElement('img');
+        img.src = item.image;
+        img.alt = item.name;
+        const info = document.createElement('div');
+        info.className = 'suggest-info';
+        const name = document.createElement('div');
+        name.className = 'suggest-name';
+        name.textContent = item.name;
+        const badge = document.createElement('div');
+        badge.className = 'suggest-badge' + (item.fits ? ' fits' : ' loose');
+        badge.textContent = item.fits ? 'Fits this look' : 'Loose match only';
+        info.appendChild(name);
+        info.appendChild(badge);
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn small';
+        addBtn.textContent = '+ Add';
+        addBtn.addEventListener('click', () => {
+          if (category === 'outwear' && item.fits) {
+            addOutwearToBoard(item);
+          } else {
+            addToAddedStrip(item);
+          }
+          addBtn.disabled = true;
+          addBtn.textContent = 'Added';
         });
-        accessoryGrid.style.display = items.length ? 'flex' : 'none';
-        accessorizeBtn.style.display = 'none';
-      } catch (e) {
-        accessorizeBtn.disabled = false;
-        accessorizeBtn.textContent = '+ Add accessories (jewelry, bags, watches...)';
+        card.appendChild(img);
+        card.appendChild(info);
+        card.appendChild(addBtn);
+        suggestResults.appendChild(card);
+      });
+    }
+
+    findMatchesBtn.addEventListener('click', async () => {
+      findMatchesBtn.disabled = true;
+      findMatchesBtn.textContent = 'Finding matches...';
+      try {
+        const category = suggestCategory.value;
+        const body = new URLSearchParams({ category: category, context_vectors: JSON.stringify(contextVectors) });
+        const res = await fetch('{{ url_for("suggest") }}', { method: 'POST', body });
+        const items = await res.json();
+        renderResults(items, category);
+      } finally {
+        findMatchesBtn.disabled = false;
+        findMatchesBtn.textContent = 'Find Matches';
       }
     });
+
     function applyTheme() {
       const t = localStorage.getItem('theme') || 'light';
       if (t === 'dark') document.documentElement.classList.add('dark');

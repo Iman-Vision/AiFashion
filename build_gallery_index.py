@@ -20,10 +20,13 @@ import random
 import shutil
 from pathlib import Path
 
-from ai_fashion.analyzer import analyze_image, feature_vector
+from ai_fashion.analyzer import analyze_image, feature_vector, infer_formality, _open_image
 
 BASE_DIR = Path(__file__).parent
-DEFAULT_ROOT = BASE_DIR / "Re-PolyVore" / "Re-PolyVore" / "Re-PolyVore"
+# Re-PolyVore itself is deleted once this has run once (see README) — the
+# permanent source from then on is the gallery_assets/ copy this script
+# already made, which has the same per-category folder layout.
+DEFAULT_ROOT = BASE_DIR / "gallery_assets"
 DEFAULT_OUT = BASE_DIR / "models" / "gallery_index.json"
 DEFAULT_ASSETS = BASE_DIR / "gallery_assets"
 
@@ -87,19 +90,23 @@ def build_index(root: Path, out_path: Path, assets_dir: Path, per_category: int,
         for i, f in enumerate(sample):
             try:
                 feats = analyze_image(str(f))
+                img = _open_image(str(f)) if folder == "shoes" else None
             except Exception:
                 continue
             colors = feats.get("dominant_colors") or ["#999999"]
-            vec = feature_vector(colors[0], feats.get("pattern", "solid"), feats.get("texture", "smooth"))
+            formality = infer_formality(folder, img)
+            vec = feature_vector(colors[0], feats.get("pattern", "solid"), feats.get("texture", "smooth"), formality)
 
             dest = out_cat_dir / f.name
-            shutil.copy2(f, dest)
+            if f.resolve() != dest.resolve():
+                shutil.copy2(f, dest)
             rel = f"{folder}/{f.name}"
 
             item = {
                 "name": f"{NAME_OVERRIDE.get(folder, folder.title())} {i + 1}",
                 "image": f"/gallery/{rel}",
                 "vector": vec.tolist(),
+                "formality": formality,
             }
             if slot == "accessories":
                 item["category"] = ACCESSORY_LABEL.get(folder, folder)
