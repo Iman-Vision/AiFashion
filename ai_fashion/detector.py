@@ -40,12 +40,18 @@ def _get_mobilenet():
 def _get_classifier():
     global _classifier, _classifier_transform
     if _classifier is None:
-        _classifier, _classifier_transform = load_classifier()
+        try:
+            _classifier, _classifier_transform = load_classifier()
+        except Exception as e:
+            # e.g. a checkpoint saved under a different CATEGORY_LABELS
+            # (size mismatch) — fall back to MobileNet rather than crash.
+            print(f"Classifier checkpoint incompatible ({e}). Falling back to MobileNet.")
+            _classifier, _classifier_transform = None, classifier_transform()
     return _classifier, _classifier_transform
 
 
 # Fallback: ImageNet classes mapped to the app's canonical categories
-# (top, outwear, bottom, dress, shoes) — must match CATEGORY_LABELS.
+# (top, outwear, bottom, shoes) — must match CATEGORY_LABELS.
 FASHION_MAPPING = {
     608: "outwear", 617: "outwear",
     459: "top", 600: "top", 701: "top",
@@ -58,18 +64,16 @@ FASHION_MAPPING = {
 def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = None) -> str:
     """
     Detect the type of clothing item in the image.
-    Returns: 'top', 'outwear', 'bottom', 'dress', or 'shoes'
+    Returns: 'top', 'outwear', 'bottom', or 'shoes'
     """
     if hint:
         h = hint.lower()
-        if any(k in h for k in ["shirt", "t-shirt", "tee", "sweater", "hoodie", "blouse", "polo", "tank", "vest top"]):
+        if any(k in h for k in ["shirt", "t-shirt", "tee", "sweater", "hoodie", "blouse", "polo", "tank", "vest top", "dress", "gown", "frock"]):
             return "top"
         if any(k in h for k in ["jacket", "coat", "blazer", "cardigan", "outwear"]):
             return "outwear"
         if any(k in h for k in ["pants", "jeans", "trousers", "shorts", "skirt", "bottom", "chinos"]):
             return "bottom"
-        if any(k in h for k in ["dress", "gown", "frock"]):
-            return "dress"
         if any(k in h for k in ["shoe", "sneaker", "boot", "sandal", "loafer", "heel"]):
             return "shoes"
 
@@ -113,7 +117,7 @@ def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = Non
         if any(k in name for k in ["pants", "jeans", "trousers", "shorts"]):
             return "bottom"
         if "dress" in name:
-            return "dress"
+            return "top"
         if "shoe" in name or "sneaker" in name or "boot" in name:
             return "shoes"
 

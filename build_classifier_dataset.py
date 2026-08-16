@@ -17,11 +17,11 @@ DEFAULT_ROOT = BASE_DIR / "Re-PolyVore" / "Re-PolyVore" / "Re-PolyVore"
 DEFAULT_OUT = BASE_DIR / "dataset"
 
 # category -> source folders to draw from (split evenly across sources)
+# No "dress" — the app only detects/pairs top, outwear, bottom, shoes.
 SOURCES = {
     "top": ["top"],
     "outwear": ["outwear"],
     "bottom": ["pants", "skirt"],
-    "dress": ["dress"],
     "shoes": ["shoes"],
 }
 

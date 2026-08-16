@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 BASE_DIR = Path(__file__).parent.parent
-GALLERY_DIR = BASE_DIR / "Re-PolyVore" / "Re-PolyVore" / "Re-PolyVore"
+GALLERY_DIR = BASE_DIR / "gallery_assets"
 
 
 def _html_img(src: str, alt: str, cls: str = "") -> str:

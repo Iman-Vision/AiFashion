@@ -16,11 +16,12 @@ MODEL_DIR = BASE_DIR / "models"
 CLASSIFIER_PATH = MODEL_DIR / "clothing_classifier.pt"
 IMAGE_SIZE = 224
 
-# Super-categories used by the app. Kept alphabetically sorted on purpose:
-# ImageFolder assigns class indices by sorted folder name, so training and
-# inference only agree on which index means what if this list is sorted
-# the same way the dataset folders are.
-CATEGORY_LABELS = sorted(["top", "outwear", "bottom", "dress", "shoes"])
+# Super-categories used by the app. No "dress" — the app only detects and
+# pairs top / outwear / bottom / shoes. Kept alphabetically sorted on
+# purpose: ImageFolder assigns class indices by sorted folder name, so
+# training and inference only agree on which index means what if this list
+# is sorted the same way the dataset folders are.
+CATEGORY_LABELS = sorted(["top", "outwear", "bottom", "shoes"])
 
 # Full 13-category labels for finer classification
 FULL_CATEGORY_LABELS = [

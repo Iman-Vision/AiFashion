@@ -8,6 +8,7 @@ vscode/
 Re-PolyVore/
 dataset/
 uploads/
+gallery_assets/
 # Results
 results/comparisons/*.png
 results/metrics_summary.csv

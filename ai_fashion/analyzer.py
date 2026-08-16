@@ -14,22 +14,6 @@ except Exception:
 PATTERNS = ["solid", "checked", "striped_vertical", "striped_horizontal", "print"]
 TEXTURES = ["smooth", "textured"]
 
-# Named colors used across the catalog/pool, mapped to hex for vectorizing.
-COLOR_NAME_TO_HEX = {
-    "white": "#ffffff", "black": "#111111", "grey": "#808080", "gray": "#808080",
-    "khaki": "#c3b091", "beige": "#e8dcc8", "navy": "#1d3557", "blue": "#3a6ea5",
-    "olive": "#708238", "brown": "#6f4e37", "tan": "#d2b48c", "cream": "#f2e8d5",
-    "nude": "#e3bc9a", "camel": "#c19a6b", "neon": "#39ff14", "multi": "#999999",
-    "indigo": "#4b3f72", "lightblue": "#add8e6", "silver": "#c0c0c0", "red": "#c0392b",
-    "green": "#2e7d32", "pink": "#e75480", "purple": "#6a0dad", "yellow": "#f1c40f",
-    "orange": "#e67e22", "gold": "#d4af37",
-}
-
-
-def color_name_to_hex(name: str) -> str:
-    return COLOR_NAME_TO_HEX.get(str(name).lower(), "#999999")
-
-
 def _hex_to_rgb01(hex_color: str) -> Tuple[float, float, float]:
     c = hex_color.lstrip("#")
     if len(c) != 6:

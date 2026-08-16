@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 from ai_fashion.detector import detect_item_type, detect_top_type
-from ai_fashion.recommender import recommend_for_top, recommend_from_features
+from ai_fashion.recommender import recommend_for_top, recommend_from_features, UPLOADED_SLOT
 from ai_fashion.moodboard import render_moodboard_html
 from ai_fashion.analyzer import analyze_image
 
@@ -19,6 +19,10 @@ def run(item_image: Optional[str], item_hint: Optional[str], item_type: str) -> 
         feats = analyze_image(item_image)
         boards = recommend_from_features(itype, feats)
         up_label = itype.title()
+        uploaded_slot = UPLOADED_SLOT.get(itype)
+        if uploaded_slot:
+            for b in boards:
+                b[uploaded_slot] = {"name": up_label, "image": item_image}
     else:
         top_type, _ = detect_top_type(None, item_hint)
         boards = recommend_for_top(top_type)
@@ -37,7 +41,7 @@ def main() -> None:
     p = argparse.ArgumentParser(prog="ai-fashion", description="Generate two AI-inspired mood boards from a clothing item.")
     p.add_argument("--image", "-i", help="Path or URL to an image", default=None)
     p.add_argument("--hint", "-t", help="Text hint for fallback classification", default=None)
-    p.add_argument("--item", choices=["auto", "top", "outwear", "bottom", "dress", "shoes"], default="auto", help="What item is uploaded")
+    p.add_argument("--item", choices=["auto", "top", "outwear", "bottom", "shoes"], default="auto", help="What item is uploaded")
     args = p.parse_args()
     if not args.image and not args.hint:
         print("Provide --image or --hint")

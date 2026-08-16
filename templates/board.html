@@ -45,26 +45,52 @@
         <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
       </figure>
       {% endif %}
-      {% if b.accessories %}
-      <div class="acc a1">
-        <img src="{{ b.accessories[0].image }}" alt="{{ b.accessories[0].name }}">
-      </div>
-      {% if b.accessories|length>1 %}
-      <div class="acc a2">
-        <img src="{{ b.accessories[1].image }}" alt="{{ b.accessories[1].name }}">
-      </div>
-      {% endif %}
-      {% endif %}
       <div class="swatch s1" data-color="{{ pal[0] }}"></div>
       <div class="swatch s2" data-color="{{ pal[1] }}"></div>
       <div class="swatch s3" data-color="{{ pal[2] }}"></div>
     </section>
     {% endfor %}
+
+    <section class="accessorize">
+      <button type="button" id="accessorizeBtn" class="btn">+ Add accessories (jewelry, bags, watches...)</button>
+      <div id="accessoryGrid" class="accessory-grid" style="display:none"></div>
+    </section>
   </div>
   <button type="button" id="themeFloating" class="theme-toggle" aria-label="Toggle theme">
     <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
   </button>
   <script>
+    const accessorizeBtn = document.getElementById('accessorizeBtn');
+    const accessoryGrid = document.getElementById('accessoryGrid');
+    const targetVector = {{ (target_vector or '[]') | safe }};
+    accessorizeBtn.addEventListener('click', async () => {
+      accessorizeBtn.disabled = true;
+      accessorizeBtn.textContent = 'Finding matches...';
+      try {
+        const body = new URLSearchParams({ target_vector: JSON.stringify(targetVector) });
+        const res = await fetch('{{ url_for("accessorize") }}', { method: 'POST', body });
+        const items = await res.json();
+        accessoryGrid.innerHTML = '';
+        items.forEach(it => {
+          const card = document.createElement('div');
+          card.className = 'accessory-card';
+          const img = document.createElement('img');
+          img.src = it.image;
+          img.alt = it.name;
+          const label = document.createElement('div');
+          label.className = 'accessory-label';
+          label.textContent = it.category ? `${it.name} · ${it.category}` : it.name;
+          card.appendChild(img);
+          card.appendChild(label);
+          accessoryGrid.appendChild(card);
+        });
+        accessoryGrid.style.display = items.length ? 'flex' : 'none';
+        accessorizeBtn.style.display = 'none';
+      } catch (e) {
+        accessorizeBtn.disabled = false;
+        accessorizeBtn.textContent = '+ Add accessories (jewelry, bags, watches...)';
+      }
+    });
     function applyTheme() {
       const t = localStorage.getItem('theme') || 'light';
       if (t === 'dark') document.documentElement.classList.add('dark');
