@@ -6,10 +6,13 @@
   <title>Mood Boards</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body class="canvas-bg">
+<body>
   <div class="container wide">
+    <div class="appbar">
+      <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">AI</span> Fashion Accessorizer</a>
+      <a class="btn ghost small" href="{{ url_for('index') }}">← New upload</a>
+    </div>
     <div class="topbar">
-      <a class="btn" href="{{ url_for('index') }}">← Back</a>
       <div class="title">Detected: {{ uploaded_label }}</div>
     </div>
     {% if features %}
@@ -27,36 +30,42 @@
     <div class="board-layout">
       <div class="board-main">
         {% for b in boards %}
-        <section class="canvas" {% if loop.first %}id="primaryCanvas"{% endif %}>
+        <section class="board-card" {% if loop.first %}id="primaryCanvas"{% endif %}>
           {% set pal = (b.palette or []) + ['#ddd', '#eee', '#ccc'] %}
-          <div class="canvas-title">{{ b.title }}</div>
-          {% if b.top %}
-          <figure class="piece p-top">
-            <img src="{{ b.top.image }}" alt="Top">
-            <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
-          </figure>
-          {% endif %}
-          {% if b.bottom %}
-          <figure class="piece p-bottom">
-            <img src="{{ b.bottom.image }}" alt="Bottom">
-            <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
-          </figure>
-          {% endif %}
-          {% if b.shoes %}
-          <figure class="piece p-shoes">
-            <img src="{{ b.shoes.image }}" alt="Shoes">
-            <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
-          </figure>
-          {% endif %}
-          {% if b.outwear %}
-          <figure class="piece p-outwear">
-            <img src="{{ b.outwear.image }}" alt="Outwear">
-            <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
-          </figure>
-          {% endif %}
-          <div class="swatch s1" data-color="{{ pal[0] }}"></div>
-          <div class="swatch s2" data-color="{{ pal[1] }}"></div>
-          <div class="swatch s3" data-color="{{ pal[2] }}"></div>
+          <div class="board-card-head">
+            <div class="board-card-title">{{ b.title }}</div>
+            <div class="board-palette">
+              <div class="dot" style="background:{{ pal[0] }}"></div>
+              <div class="dot" style="background:{{ pal[1] }}"></div>
+              <div class="dot" style="background:{{ pal[2] }}"></div>
+            </div>
+          </div>
+          <div class="piece-grid">
+            {% if b.top %}
+            <figure class="piece">
+              <div class="piece-img"><img src="{{ b.top.image }}" alt="Top"></div>
+              <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
+            </figure>
+            {% endif %}
+            {% if b.bottom %}
+            <figure class="piece">
+              <div class="piece-img"><img src="{{ b.bottom.image }}" alt="Bottom"></div>
+              <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
+            </figure>
+            {% endif %}
+            {% if b.shoes %}
+            <figure class="piece">
+              <div class="piece-img"><img src="{{ b.shoes.image }}" alt="Shoes"></div>
+              <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
+            </figure>
+            {% endif %}
+            {% if b.outwear %}
+            <figure class="piece piece-outwear">
+              <div class="piece-img"><img src="{{ b.outwear.image }}" alt="Outwear"></div>
+              <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
+            </figure>
+            {% endif %}
+          </div>
         </section>
         {% endfor %}
       </div>
@@ -74,7 +83,7 @@
           <option value="accessory">Other accessories</option>
           <option value="outwear">Outwear layer</option>
         </select>
-        <button type="button" id="findMatchesBtn" class="btn primary full">Find Matches</button>
+        <button type="button" id="findMatchesBtn" class="btn full">Find Matches</button>
         <div id="suggestResults" class="suggest-results"></div>
 
         <div id="addedSection" class="added-section" style="display:none">
@@ -113,16 +122,19 @@
     function addOutwearToBoard(item) {
       const canvas = document.getElementById('primaryCanvas');
       if (!canvas) { addToAddedStrip(item); return; }
-      let figure = canvas.querySelector('.p-outwear');
+      let figure = canvas.querySelector('.piece-outwear');
       if (!figure) {
         figure = document.createElement('figure');
-        figure.className = 'piece p-outwear';
+        figure.className = 'piece piece-outwear';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'piece-img';
         const img = document.createElement('img');
+        imgWrap.appendChild(img);
         const cap = document.createElement('figcaption');
         cap.className = 'cap';
-        figure.appendChild(img);
+        figure.appendChild(imgWrap);
         figure.appendChild(cap);
-        canvas.appendChild(figure);
+        canvas.querySelector('.piece-grid').appendChild(figure);
       }
       figure.querySelector('img').src = item.image;
       figure.querySelector('img').alt = item.name;
@@ -173,7 +185,7 @@
 
     findMatchesBtn.addEventListener('click', async () => {
       findMatchesBtn.disabled = true;
-      findMatchesBtn.textContent = 'Finding matches...';
+      findMatchesBtn.innerHTML = '<span class="spinner"></span> Finding matches...';
       try {
         const category = suggestCategory.value;
         const body = new URLSearchParams({ category: category, context_vectors: JSON.stringify(contextVectors) });
@@ -204,7 +216,6 @@
       updateIcons();
     });
     applyTheme(); updateIcons();
-    document.querySelectorAll('.swatch').forEach(el=>{const c=el.getAttribute('data-color'); if(c){el.style.backgroundColor=c;}});
   </script>
 </body>
 </html>
