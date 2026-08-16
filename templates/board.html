@@ -10,7 +10,7 @@
   <div class="container narrow">
     <div class="topbar">
       <a class="btn" href="{{ url_for('index') }}">← Back</a>
-      <div class="title">Detected: {{ uploaded_label or uploaded_type|title }}</div>
+      <div class="title">Detected: {{ uploaded_label }}</div>
     </div>
     {% if features %}
     <div class="features-bar">
@@ -29,20 +29,20 @@
       <div class="canvas-title">{{ b.title }}</div>
       {% if b.top %}
       <figure class="piece p-top">
-        <img src="{% if uploaded_type in ('top', 'outwear') %}{{ uploaded_image }}{% else %}{{ b.top.image }}{% endif %}" alt="Top">
-        <figcaption class="cap">{% if uploaded_type in ('top', 'outwear') %}{{ uploaded_label or 'Top' }}{% else %}{{ b.top.name }}{% endif %}</figcaption>
+        <img src="{{ b.top.image }}" alt="Top">
+        <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
       </figure>
       {% endif %}
       {% if b.bottom %}
       <figure class="piece p-bottom">
-        <img src="{% if uploaded_type in ('bottom', 'dress') %}{{ uploaded_image }}{% else %}{{ b.bottom.image }}{% endif %}" alt="Bottom">
-        <figcaption class="cap">{% if uploaded_type in ('bottom', 'dress') %}{{ uploaded_label or 'Bottom' }}{% else %}{{ b.bottom.name }}{% endif %}</figcaption>
+        <img src="{{ b.bottom.image }}" alt="Bottom">
+        <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
       </figure>
       {% endif %}
       {% if b.shoes %}
       <figure class="piece p-shoes">
-        <img src="{% if uploaded_type=='shoes' %}{{ uploaded_image }}{% else %}{{ b.shoes.image }}{% endif %}" alt="Shoes">
-        <figcaption class="cap">{% if uploaded_type=='shoes' %}{{ uploaded_label or 'Shoes' }}{% else %}{{ b.shoes.name }}{% endif %}</figcaption>
+        <img src="{{ b.shoes.image }}" alt="Shoes">
+        <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
       </figure>
       {% endif %}
       {% if b.accessories %}

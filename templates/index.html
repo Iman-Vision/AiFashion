@@ -10,7 +10,7 @@
   <div class="container">
     <div class="hero">
       <h1>AI Fashion Accessorizer</h1>
-      <p>Drop an image or capture live. We auto-detect upper, lower, or footwear.</p>
+      <p>Drop one photo for instant matches, or upload your own top/bottom/shoes together (up to 3) to build one board from your real pieces.</p>
       {% if request.args.get('error') == 'missing_image' %}
       <div class="note">Please upload a photo or capture from camera.</div>
       {% endif %}
@@ -20,9 +20,9 @@
         <div class="card upload">
           <h2>Upload</h2>
           <div class="drop" id="drop">
-            <input id="file" type="file" name="image" accept="image/*" class="file" aria-label="Choose image">
-            <div class="drop-hint">Drag & drop or click to select</div>
-            <img id="preview" alt="preview" style="display:none"/>
+            <input id="file" type="file" name="image" accept="image/*" multiple class="file" aria-label="Choose image(s)">
+            <div class="drop-hint">Drag & drop or click to select — 1 photo for instant matches, or up to 3 (top/bottom/shoes) for your own board</div>
+            <div id="previewList" class="preview-list"></div>
           </div>
         </div>
         <div class="card camera">
@@ -55,31 +55,35 @@
     const captureBtn = document.getElementById('captureBtn');
     const hidden = document.getElementById('camera_image');
     const file = document.getElementById('file');
-    const preview = document.getElementById('preview');
+    const previewList = document.getElementById('previewList');
     const submitBtn = document.getElementById('submitBtn');
     const drop = document.getElementById('drop');
     const themeFloating = document.getElementById('themeFloating');
     let stream = null;
     function updateSubmit() {
-      submitBtn.disabled = !(hidden.value || (file && file.files && file.files[0]));
+      submitBtn.disabled = !(hidden.value || (file && file.files && file.files.length));
+    }
+    function renderPreviews(fileList) {
+      previewList.innerHTML = '';
+      Array.from(fileList).slice(0, 3).forEach(f => {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(f);
+        img.alt = f.name;
+        previewList.appendChild(img);
+      });
     }
     file.addEventListener('change', () => {
-      const f = file.files[0];
-      if (f) {
-        const url = URL.createObjectURL(f);
-        preview.src = url;
-        preview.style.display = 'block';
+      if (file.files && file.files.length) {
+        renderPreviews(file.files);
         updateSubmit();
       }
     });
     ;['dragenter','dragover','dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation();}));
     drop.addEventListener('drop', e=>{
       const dt = e.dataTransfer;
-      if (dt && dt.files && dt.files[0]) {
+      if (dt && dt.files && dt.files.length) {
         file.files = dt.files;
-        const url = URL.createObjectURL(dt.files[0]);
-        preview.src = url;
-        preview.style.display = 'block';
+        renderPreviews(dt.files);
         updateSubmit();
       }
     });
@@ -98,8 +102,10 @@
       canvas.height = video.videoHeight || 480;
       ctx.drawImage(video, 0, 0);
       hidden.value = canvas.toDataURL('image/png');
-      preview.src = hidden.value;
-      preview.style.display = 'block';
+      const img = document.createElement('img');
+      img.src = hidden.value;
+      img.alt = 'camera capture';
+      previewList.appendChild(img);
       updateSubmit();
     });
     function applyTheme() {

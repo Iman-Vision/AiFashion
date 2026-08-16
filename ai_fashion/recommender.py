@@ -222,9 +222,12 @@ def _accessory_pairs(target_vector: np.ndarray) -> Tuple[List[Item], List[Item]]
 
 # Which board slot the uploaded item itself occupies. The board only ever
 # contains the *complementary* pool items, so the uploaded item's own slot
-# has to be added separately or the template has nothing to swap its image
+# has to be added separately or the template has nothing to render its image
 # into. A dress has no dedicated card, so it borrows the "bottom" slot.
-_UPLOADED_SLOT = {"top": "top", "outwear": "top", "bottom": "bottom", "dress": "bottom", "shoes": "shoes"}
+UPLOADED_SLOT = {"top": "top", "outwear": "top", "bottom": "bottom", "dress": "bottom", "shoes": "shoes"}
+
+# slot name (as used on a Board) -> ITEM_POOL key
+_SLOT_TO_POOL_KEY = {"top": "tops", "bottom": "bottoms", "shoes": "shoes"}
 
 
 def recommend_from_features(item_type: str, features: Dict[str, object]) -> List[Board]:
@@ -290,9 +293,28 @@ def recommend_from_features(item_type: str, features: Dict[str, object]) -> List
                 "accessories": acc_pair_1 if i == 0 else acc_pair_2,
             })
 
-    uploaded_slot = _UPLOADED_SLOT.get(item_type)
-    if uploaded_slot:
-        for b in boards:
-            b[uploaded_slot] = {"name": None, "image": None}
-
     return boards[:2]
+
+
+def recommend_from_uploads(uploaded: Dict[str, Item]) -> Board:
+    """Build a single board from the caller's own photos (already placed in
+    their slots — 'top', 'bottom' and/or 'shoes', each with an 'image',
+    'name' and 'vector'). Any slot not supplied is filled with the closest
+    match from the pool by cosine similarity to the average of the vectors
+    the caller did provide."""
+    vectors = [item["vector"] for item in uploaded.values() if "vector" in item]
+    target_vector = np.mean(vectors, axis=0) if vectors else feature_vector("#cccccc")
+
+    board: Board = {"style": "your_look", "title": "Your Look"}
+    for slot, pool_key in _SLOT_TO_POOL_KEY.items():
+        if slot in uploaded:
+            board[slot] = uploaded[slot]
+        else:
+            best = _find_best_items(target_vector, ITEM_POOL[pool_key], count=1)
+            if best:
+                board[slot] = best[0]
+
+    acc_pair_1, _ = _accessory_pairs(target_vector)
+    board["accessories"] = acc_pair_1
+    board["palette"] = ["#111111", "#f5f5f5", "#cccccc"]
+    return board

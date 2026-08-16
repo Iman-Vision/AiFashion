@@ -40,12 +40,28 @@ def _hex_to_rgb01(hex_color: str) -> Tuple[float, float, float]:
     return (r, g, b)
 
 
+# Color is the dominant visual signal for matching; pattern/texture should
+# only break ties between similarly-colored items. Without this weighting
+# the one-hot pattern/texture bits (norm ~1.4) outweigh RGB (norm <1.7 but
+# usually much smaller for muted colors), and since most real photos land
+# on "solid"/"smooth" that shared match swamps cosine similarity — results
+# barely move with color at all.
+_COLOR_WEIGHT = 4.0
+_PATTERN_WEIGHT = 0.5
+_TEXTURE_WEIGHT = 0.5
+
+
 def feature_vector(color_hex: str, pattern: str = "solid", texture: str = "smooth") -> np.ndarray:
-    """Handcrafted feature vector: RGB + one-hot pattern + one-hot texture."""
+    """Handcrafted feature vector: weighted RGB + one-hot pattern + one-hot texture."""
     r, g, b = _hex_to_rgb01(color_hex)
     pattern_vec = [1.0 if pattern == p else 0.0 for p in PATTERNS]
     texture_vec = [1.0 if texture == t else 0.0 for t in TEXTURES]
-    return np.array([r, g, b, *pattern_vec, *texture_vec], dtype=np.float64)
+    return np.array(
+        [r * _COLOR_WEIGHT, g * _COLOR_WEIGHT, b * _COLOR_WEIGHT]
+        + [v * _PATTERN_WEIGHT for v in pattern_vec]
+        + [v * _TEXTURE_WEIGHT for v in texture_vec],
+        dtype=np.float64,
+    )
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -72,6 +88,15 @@ def _open_image(path_or_url: str):
     return Image.open(str(p)).convert("RGB")
 
 
+def _is_studio_background(rgb) -> bool:
+    """Near-white or near-flat-gray — the seamless backdrop most product
+    photos are shot on, not the garment itself."""
+    r, g, b = rgb
+    if max(r, g, b) - min(r, g, b) > 12:
+        return False  # has actual hue, not a neutral backdrop
+    return r > 225 and g > 225 and b > 225
+
+
 def _dominant_colors(img, k: int = 5) -> List[str]:
     w, h = img.size
     s = min(96, max(32, min(w, h)))
@@ -81,8 +106,19 @@ def _dominant_colors(img, k: int = 5) -> List[str]:
         pal = small.convert("P", palette=Image.ADAPTIVE, colors=k)
         colors = pal.getcolors()
     colors = sorted(colors or [], key=lambda c: c[0], reverse=True)
+
+    # Product photos are almost always shot on a white/light-grey backdrop,
+    # which getcolors() ranks first by sheer pixel count. Without skipping
+    # it, nearly every item's "dominant color" comes out white regardless
+    # of the actual garment, which collapses all cosine-similarity matching
+    # toward the same handful of pale items. Prefer the most frequent color
+    # that isn't the backdrop; only fall back to it if nothing else exists
+    # (i.e. the garment genuinely is white).
+    foreground = [c for c in colors if not _is_studio_background(c[1])]
+    ranked = foreground if foreground else colors
+
     out = []
-    for count, rgb in colors[:k]:
+    for count, rgb in ranked[:k]:
         r, g, b = rgb
         out.append(f"#{r:02x}{g:02x}{b:02x}")
     return out
