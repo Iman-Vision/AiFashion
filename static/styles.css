@@ -46,6 +46,7 @@ body.bg{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system
 .p-top{top:78px;left:48px;width:420px;height:460px;transform:rotate(-0.6deg)}
 .p-bottom{top:120px;right:52px;width:360px;height:380px;transform:rotate(0.8deg)}
 .p-shoes{bottom:36px;left:320px;width:300px;height:220px;transform:rotate(-1.2deg)}
+.p-outwear{bottom:36px;right:36px;width:220px;height:200px;transform:rotate(2deg);z-index:2}
 .swatch{position:absolute;width:64px;height:64px;border-radius:6px;border:1px solid #e5e7eb;box-shadow:0 8px 16px rgba(0,0,0,.08)}
 .s1{top:64px;right:220px}
 .s2{top:144px;right:136px}
@@ -68,10 +69,11 @@ html:not(.dark) .icon-moon{display:none}
 @media (max-width:980px){
   .grid{grid-template-columns:1fr}
   .g2{grid-template-columns:1fr}
-  .canvas{min-height:980px}
+  .canvas{min-height:1340px}
   .p-top{top:92px;left:28px;width:76%;height:420px}
   .p-bottom{top:540px;right:auto;left:28px;width:70%;height:340px}
-  .p-shoes{bottom:32px;left:28px;width:64%;height:200px}
+  .p-shoes{top:900px;bottom:auto;left:28px;width:64%;height:200px}
+  .p-outwear{top:1120px;bottom:auto;right:auto;left:28px;width:60%;height:180px;z-index:1}
   .s1{top:36px;right:36px}
   .s2{top:112px;right:36px}
   .s3{top:188px;right:36px}

@@ -45,6 +45,12 @@
         <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
       </figure>
       {% endif %}
+      {% if b.outwear %}
+      <figure class="piece p-outwear">
+        <img src="{{ b.outwear.image }}" alt="Outwear">
+        <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
+      </figure>
+      {% endif %}
       <div class="swatch s1" data-color="{{ pal[0] }}"></div>
       <div class="swatch s2" data-color="{{ pal[1] }}"></div>
       <div class="swatch s3" data-color="{{ pal[2] }}"></div>

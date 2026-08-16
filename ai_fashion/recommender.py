@@ -1,3 +1,4 @@
+import itertools
 import json
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -100,13 +101,17 @@ def recommend_for_top(top_type: str) -> List[Board]:
     return boards[:2]
 
 
-# Which board slot each detected/uploaded item type occupies. The app only
-# ever deals in these three essential slots — no "dress" category.
-UPLOADED_SLOT = {"top": "top", "outwear": "top", "bottom": "bottom", "shoes": "shoes"}
+# Which board slot each detected/uploaded item type occupies. "outwear" gets
+# its own slot — it's a layering piece, not interchangeable with "top" — and
+# is intentionally left out of ESSENTIAL_SLOTS below, so it's never
+# auto-filled from the pool: it only shows up on a board when the caller
+# actually uploaded one.
+UPLOADED_SLOT = {"top": "top", "outwear": "outwear", "bottom": "bottom", "shoes": "shoes"}
 
 # slot name (as used on a Board) -> ITEM_POOL key
-_SLOT_TO_POOL_KEY = {"top": "tops", "bottom": "bottoms", "shoes": "shoes"}
+_SLOT_TO_POOL_KEY = {"top": "tops", "bottom": "bottoms", "shoes": "shoes", "outwear": "outwear"}
 
+# Slots every board must have, always filled (from the pool if not supplied).
 ESSENTIAL_SLOTS = ("top", "bottom", "shoes")
 
 _item_vectors: Dict[str, np.ndarray] = {}
@@ -210,25 +215,23 @@ def build_boards(known: Dict[str, Item], target_vector: np.ndarray, palette: Lis
         board.update(style="your_look", title="Your Look", palette=palette)
         return [board]
 
-    candidate_pool = max(count * 3, 6)
+    # Fewer candidates per slot as more slots are missing, so the combo
+    # count (candidates ** missing_slots) stays cheap regardless of how
+    # many essential slots need filling.
+    candidate_pool = max(count * 3, 6) if len(missing) <= 2 else count + 3
     candidates = {
         slot: _find_best_items(target_vector, ITEM_POOL[_SLOT_TO_POOL_KEY[slot]], count=candidate_pool)
         for slot in missing
     }
 
-    if len(missing) == 1:
-        slot = missing[0]
-        combos = [{slot: c} for c in candidates[slot]]
-        combos.sort(key=lambda combo: _combo_score(target_vector, [known.get(s) or combo[slot] for s in ESSENTIAL_SLOTS]), reverse=True)
-    else:
-        combos = []
-        for a in candidates[missing[0]]:
-            for b in candidates[missing[1]]:
-                combos.append({missing[0]: a, missing[1]: b})
-        combos.sort(
-            key=lambda combo: _combo_score(target_vector, list(known.values()) + list(combo.values())),
-            reverse=True,
-        )
+    combos = [
+        dict(zip(missing, picks))
+        for picks in itertools.product(*(candidates[slot] for slot in missing))
+    ]
+    combos.sort(
+        key=lambda combo: _combo_score(target_vector, list(known.values()) + list(combo.values())),
+        reverse=True,
+    )
 
     boards: List[Board] = []
     used_images = {item["image"] for item in known.values()}
