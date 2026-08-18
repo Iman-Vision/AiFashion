@@ -85,7 +85,6 @@
           <label class="check-item"><input type="checkbox" value="rings"> Rings</label>
           <label class="check-item"><input type="checkbox" value="watches"> Watches</label>
         </div>
-        <button type="button" id="applyBtn" class="btn primary full">Add Selected</button>
         <div id="skippedNote" class="sidebar-hint" style="display:none;margin-top:12px"></div>
       </aside>
     </div>
@@ -94,7 +93,6 @@
     <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
   </button>
   <script>
-    const applyBtn = document.getElementById('applyBtn');
     const skippedNote = document.getElementById('skippedNote');
     // one context-vector list per board, indexed same as data-board-index
     const boardContexts = {{ (context_vectors or '[]') | safe }};
@@ -102,8 +100,8 @@
     // Every add-on (outwear or any accessory category) becomes a full
     // piece card in the grid — same size/treatment as top/bottom/shoes,
     // genuinely part of the moodboard rather than a small floating chip.
-    // One card per category per board; re-adding the same category
-    // replaces its card instead of duplicating it.
+    // One card per category per board; ticking replaces/creates it,
+    // unticking removes it — the checkbox state IS the board state.
     function addPieceToBoard(canvas, category, item) {
       const slotClass = 'p-add-' + category;
       let figure = canvas.querySelector('.' + slotClass);
@@ -122,6 +120,11 @@
       figure.querySelector('figcaption').textContent = item.name;
     }
 
+    function removePieceFromBoard(canvas, category) {
+      const figure = canvas.querySelector('.p-add-' + category);
+      if (figure) figure.remove();
+    }
+
     async function fetchBest(category, context) {
       const body = new URLSearchParams({ category: category, context_vectors: JSON.stringify(context) });
       const res = await fetch('{{ url_for("suggest") }}', { method: 'POST', body });
@@ -129,41 +132,39 @@
       return items.length ? items[0] : null;
     }
 
-    applyBtn.addEventListener('click', async () => {
-      const checked = Array.from(document.querySelectorAll('.check-item input:checked'));
-      if (!checked.length) return;
-      applyBtn.disabled = true;
-      applyBtn.innerHTML = '<span class="spinner"></span> Checking against each board...';
-      const skippedByBoard = {};
-      const canvases = Array.from(document.querySelectorAll('.canvas'));
+    document.querySelectorAll('.check-item input').forEach(box => {
+      box.addEventListener('change', async () => {
+        const category = box.value;
+        const label = box.parentElement.textContent.trim();
+        const canvases = Array.from(document.querySelectorAll('.canvas'));
 
-      for (const canvas of canvases) {
-        const idx = parseInt(canvas.dataset.boardIndex, 10);
-        const context = boardContexts[idx] || [];
-        for (const box of checked) {
-          const category = box.value;
-          const label = box.parentElement.textContent.trim();
+        if (!box.checked) {
+          canvases.forEach(canvas => removePieceFromBoard(canvas, category));
+          skippedNote.style.display = 'none';
+          return;
+        }
+
+        box.disabled = true;
+        const skippedBoards = [];
+        for (const canvas of canvases) {
+          const idx = parseInt(canvas.dataset.boardIndex, 10);
+          const context = boardContexts[idx] || [];
           const best = await fetchBest(category, context);
           if (best && best.fits) {
             addPieceToBoard(canvas, category, best);
           } else {
-            (skippedByBoard[idx] = skippedByBoard[idx] || []).push(label);
+            skippedBoards.push(idx + 1);
           }
         }
-      }
-      checked.forEach(box => box.checked = false);
+        box.disabled = false;
 
-      const notes = Object.keys(skippedByBoard).map(idx =>
-        `Board ${parseInt(idx, 10) + 1}: skipped ${skippedByBoard[idx].join(', ')}`
-      );
-      if (notes.length) {
-        skippedNote.style.display = 'block';
-        skippedNote.textContent = notes.join(' · ');
-      } else {
-        skippedNote.style.display = 'none';
-      }
-      applyBtn.disabled = false;
-      applyBtn.textContent = 'Add Selected';
+        if (skippedBoards.length) {
+          skippedNote.style.display = 'block';
+          skippedNote.textContent = `${label} didn't match board${skippedBoards.length > 1 ? 's' : ''} ${skippedBoards.join(', ')} — left off there.`;
+        } else {
+          skippedNote.style.display = 'none';
+        }
+      });
     });
 
     function applyTheme() {

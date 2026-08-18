@@ -13,7 +13,9 @@ import shutil
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
-DEFAULT_ROOT = BASE_DIR / "Re-PolyVore" / "Re-PolyVore" / "Re-PolyVore"
+# Re-PolyVore itself is deleted (see README) — gallery_assets/ is the
+# permanent local copy build_gallery_index.py made from it, same layout.
+DEFAULT_ROOT = BASE_DIR / "gallery_assets"
 DEFAULT_OUT = BASE_DIR / "dataset"
 
 # category -> source folders to draw from (split evenly across sources)

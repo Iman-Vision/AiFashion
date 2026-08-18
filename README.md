@@ -1,32 +1,36 @@
 # AI Fashion Accessorizer
 
-Upload a clothing photo (or a few), the app detects what it is, and builds
+Upload a clothing photo (or a few), confirm what it actually is, and get
 mood boards pairing it with real matched pieces from a fashion dataset —
 plus an opt-in sidebar for accessories and an outwear layer.
 
 ## How it works
 
-### 1. Detection — "what did you upload?"
+### 1. Detection — "what did you upload?" (then you confirm it)
 
-`ai_fashion/detector.py` classifies each uploaded photo into one of four
-categories: **top, outwear, bottom, shoes**. (There is no "dress" category —
-dress-like uploads are treated as tops.)
-
-Detection tries three things in order, falling back gracefully if one fails:
+`ai_fashion/detector.py` guesses each uploaded photo's category — **top,
+outwear, bottom, shoes** (no "dress" category — dress-like uploads default
+to "top"). Detection tries three things in order, falling back gracefully:
 
 1. **`models/clothing_classifier.pt`** — a MobileNetV3-Small CNN, fine-tuned
-   on ~16,000 photos sampled from the dataset (4,000 per category — see
-   [Retraining](#rebuilding-the-data-only-needed-if-you-want-to-change-it)
-   below). Scores 90–100% on catalog-style photos, but the training set is
+   on however many photos are available per category (see
+   [Rebuilding the data](#rebuilding-the-data-only-needed-if-you-want-to-change-it)
+   below). Scores well on catalog-style photos, but the training set is
    entirely *flat product-catalog shots* (garment centered, filling the
    frame, white background) — real lifestyle photos (a person wearing the
    item, off-center, cluttered background) are out-of-distribution and can
    get confidently misclassified (a real photo of a person in a blouse was
-   once scored "shoes" at 99.97% confidence). Training now uses heavier
-   augmentation (`RandomResizedCrop`, perspective jitter, random erasing —
-   see `classifier.py`'s `train_classifier`) to close that gap, but it's a
-   real limitation, not something one flag fixes — the dataset itself has
-   zero on-model photos to learn from.
+   once scored "shoes" at 99.97% confidence). A heavier-augmentation
+   training variant was tried to close that gap and reverted — it lowered
+   confidence without fixing the actual misclassifications, so it wasn't
+   worth the tradeoff. **The real fix here isn't a training flag: the app
+   always shows a confirm step** (`templates/confirm.html`, routes
+   `/analyze` → `/generate` in `app.py`) — every uploaded photo displays
+   its guessed category with a confidence percentage and lets you correct
+   it (or, for a single upload, mark it "Mixed / full outfit" to use
+   purely as a style/color reference without locking it into any one
+   slot) before any board gets built. Wrong guesses now cost one click
+   instead of silently producing a wrong board.
 2. **MobileNet + ImageNet mapping** — if the classifier checkpoint is
    missing or incompatible (e.g. its label count doesn't match
    `CATEGORY_LABELS` after a code change), falls back to a generic
@@ -152,9 +156,12 @@ Writes standalone HTML mood boards to `out/`.
 ## Rebuilding the data (only needed if you want to change it)
 
 The original 3.5GB Re-PolyVore dataset dump has been **deleted** — only the
-small subset actually used got copied into `gallery_assets/` (~200MB) and
-`dataset/` (~800MB, for classifier training). Both scripts below now read
-from `gallery_assets/`, since that's all that's left.
+small subset actually used got copied into `gallery_assets/` (~200MB). Both
+scripts below read from `gallery_assets/`, since that's all that's left —
+**this caps classifier training data at whatever was originally sampled
+into `gallery_assets/` per category (currently ~400), not the 4,000/category
+the flags below ask for; they silently take everything available instead.**
+Re-downloading the full Re-PolyVore dump is the only way to get more.
 
 **`build_gallery_index.py`** — rebuilds `models/gallery_index.json` (the
 matching pool) and re-extracts color/pattern/texture/formality for every
@@ -164,27 +171,28 @@ python build_gallery_index.py --per-category 400
 ```
 
 **`build_classifier_dataset.py`** + **`train_all.py`** — rebuilds the
-classifier training set and retrains it (CPU, ~90 min for 12 epochs on
-16,000 images):
+classifier training set and retrains it:
 ```
 python build_classifier_dataset.py --per-category 4000
-python train_all.py --data-dir dataset --epochs-classifier 12
+python train_all.py --data-dir dataset --epochs-classifier 15
 ```
 
-If you want to start over with the *full* original dataset (more variety,
-real pants-vs-skirt-vs-heels labels beyond what's already captured), you'd
-need to re-download/extract Re-PolyVore and point `--root` at it again —
-see `build_gallery_index.py`'s `DEFAULT_ROOT`.
+If you want to start over with the *full* original dataset (more training
+variety, real pants-vs-skirt-vs-heels labels beyond what's already
+captured), you'd need to re-download/extract Re-PolyVore and point `--root`
+at it again for **both** scripts — see their `DEFAULT_ROOT`.
 
 ## What `models/clothing_classifier.pt` actually is
 
 It's *only* the item-type detector's weights — the CNN that answers "is
-this a top, outwear, bottom, or shoes?" (step 1 above). It has nothing to
-do with matching/pairing; that's pure cosine-similarity math over
-handcrafted feature vectors (step 3), no learned model involved. If this
-file is missing or was trained with a different category list, detection
-silently degrades to the weaker MobileNet/heuristic fallback — the app
-still works, just less accurately.
+this a top, outwear, bottom, or shoes?" (step 1 above), and only the first
+opinion in a chain the user gets to correct via the confirm step — not an
+oracle. It has nothing to do with matching/pairing; that's pure
+cosine-similarity math over handcrafted feature vectors (step 3), no
+learned model involved. If this file is missing or was trained with a
+different category list, detection silently degrades to the weaker
+MobileNet/heuristic fallback — the app still works, just less accurately
+(and the confirm step catches it either way).
 
 ## Project layout
 
@@ -195,24 +203,28 @@ ai_fashion/
   classifier.py      the MobileNetV3 classifier: model, training, inference
   recommender.py     matching/pairing logic, ITEM_POOL, board building
   moodboard.py        standalone HTML board renderer (used by main.py only)
-app.py                 Flask web app (routes: /, /analyze, /suggest, /gallery, /uploads)
+app.py                 Flask web app (routes: /, /analyze, /generate, /suggest, /gallery, /uploads)
 main.py                 CLI entry point
 build_gallery_index.py     builds models/gallery_index.json + gallery_assets/
 build_classifier_dataset.py builds dataset/ for classifier training
 train_all.py                 runs classifier training
-templates/, static/          Flask views + CSS/JS
+templates/index.html         upload page
+templates/confirm.html        confirm/correct detected type before generating
+templates/board.html           mood boards + sidebar
+static/                CSS/JS
 models/                classifier.pt + gallery_index.json (committed-size, not gitignored)
 gallery_assets/        matched-item photos served at /gallery/... (gitignored, ~200MB)
-dataset/                classifier training images (gitignored, ~800MB)
+dataset/                classifier training images (gitignored)
 ```
 
 ## Known limitations
 
 - **Real-world photo accuracy**: the classifier is trained entirely on flat
   product-catalog shots (see step 1 above) — it can still misclassify a
-  real "person wearing the item" photo, even confidently. Heavier
-  augmentation helps but doesn't fully close this gap without actual
-  on-model training data, which the source dataset doesn't have.
+  real "person wearing the item" photo, even confidently (augmentation was
+  tried and reverted — it reduced confidence without fixing the
+  misclassifications). This is why the app always shows a confirm/correct
+  step rather than trusting a single guess.
 - Shoe formality is a silhouette *heuristic*, not ground truth — it will
   misjudge some shoes (e.g. a flat but narrow dress shoe, or a chunky
   platform heel).

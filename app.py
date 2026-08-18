@@ -6,11 +6,12 @@ from pathlib import Path
 
 import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify
-from ai_fashion.analyzer import analyze_image, detect_item_type, feature_vector, estimate_shoe_formality, _open_image
-from ai_fashion.detector import detect_item_type as detect_item_type_nn
+from ai_fashion.analyzer import analyze_image, feature_vector, estimate_shoe_formality, _open_image
+from ai_fashion.detector import detect_item_type_with_confidence
 from ai_fashion.recommender import (
     recommend_from_features,
     recommend_from_uploads,
+    recommend_style_reference,
     suggest_additions,
     UPLOADED_SLOT,
     ESSENTIAL_SLOTS,
@@ -64,14 +65,6 @@ def _save_camera_capture(data_uri: str) -> str:
     return str(path)
 
 
-def _detect(saved_path: str) -> str:
-    # Try the neural network classifier first, fall back to heuristic
-    try:
-        return detect_item_type_nn(saved_path)
-    except Exception:
-        return detect_item_type(saved_path)
-
-
 def _feature_vector_for(feats, saved_path: str = None, item_type: str = None) -> np.ndarray:
     dom = feats.get("dominant_colors") or []
     formality = "neutral"
@@ -100,6 +93,10 @@ def _all_boards_context(boards) -> list:
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
+    """Step 1: save the upload(s), run detection, and ask the user to
+    confirm or correct what each photo actually is before building any
+    boards — the classifier can be confidently wrong on real (non-catalog)
+    photos, so we don't silently trust it (see README's Known Limitations)."""
     img_files = [f for f in request.files.getlist("image") if f and f.filename]
     cam_data = request.form.get("camera_image")
 
@@ -110,19 +107,46 @@ def analyze():
     if not saved_paths:
         return redirect(url_for("index", error="missing_image"))
 
-    if len(saved_paths) == 1:
-        saved_path = saved_paths[0]
-        detected = _detect(saved_path)
-        feats = analyze_image(saved_path)
-        target_vector = _feature_vector_for(feats, saved_path, detected)
-        boards = recommend_from_features(detected, feats, count=3)
-        image_url = url_for("uploads", filename=Path(saved_path).name)
-        display_type = DISPLAY_TYPE.get(detected, detected.title())
+    items = []
+    for saved_path in saved_paths:
+        detected, confidence = detect_item_type_with_confidence(saved_path)
+        items.append({
+            "path": saved_path,
+            "url": url_for("uploads", filename=Path(saved_path).name),
+            "detected": detected,
+            "confidence": confidence,
+        })
 
-        uploaded_slot = UPLOADED_SLOT.get(detected)
-        if uploaded_slot:
-            for b in boards:
-                b[uploaded_slot] = {"name": display_type, "image": image_url, "vector": target_vector.tolist()}
+    return render_template("confirm.html", items=items, allow_mixed=(len(items) == 1))
+
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    """Step 2: build the boards using whatever type the user confirmed
+    (not necessarily what detection guessed)."""
+    paths = request.form.getlist("path")
+    if not paths:
+        return redirect(url_for("index", error="missing_image"))
+    confirmed_types = [request.form.get(f"type_{i}", "top") for i in range(len(paths))]
+
+    if len(paths) == 1:
+        saved_path = paths[0]
+        confirmed = confirmed_types[0]
+        feats = analyze_image(saved_path)
+        image_url = url_for("uploads", filename=Path(saved_path).name)
+
+        if confirmed == "mixed":
+            target_vector = _feature_vector_for(feats, saved_path, None)
+            boards = recommend_style_reference(feats, count=3)
+            display_type = "Full Outfit"
+        else:
+            target_vector = _feature_vector_for(feats, saved_path, confirmed)
+            boards = recommend_from_features(confirmed, feats, count=3)
+            display_type = DISPLAY_TYPE.get(confirmed, confirmed.title())
+            uploaded_slot = UPLOADED_SLOT.get(confirmed)
+            if uploaded_slot:
+                for b in boards:
+                    b[uploaded_slot] = {"name": display_type, "image": image_url, "vector": target_vector.tolist()}
 
         return render_template(
             "board.html",
@@ -133,22 +157,23 @@ def analyze():
             context_vectors=json.dumps(_all_boards_context(boards)),
         )
 
-    # Multiple photos: detect each, place it in its own slot, and build
+    # Multiple confirmed photos: place each in its own slot, and build
     # boards that only fill the gaps from the matched dataset.
     uploaded = {}
     last_feats = None
     vectors = []
-    for saved_path in saved_paths:
-        detected = _detect(saved_path)
+    for saved_path, confirmed in zip(paths, confirmed_types):
+        if confirmed == "mixed":
+            continue
         feats = analyze_image(saved_path)
         last_feats = feats
-        slot = UPLOADED_SLOT.get(detected)
+        slot = UPLOADED_SLOT.get(confirmed)
         if not slot:
             continue
-        vec = _feature_vector_for(feats, saved_path, detected)
+        vec = _feature_vector_for(feats, saved_path, confirmed)
         vectors.append(vec)
         uploaded[slot] = {
-            "name": DISPLAY_TYPE.get(detected, detected.title()),
+            "name": DISPLAY_TYPE.get(confirmed, confirmed.title()),
             "image": url_for("uploads", filename=Path(saved_path).name),
             "vector": vec.tolist(),
         }
@@ -162,7 +187,7 @@ def analyze():
         uploaded_label="Your Photos",
         features=last_feats,
         target_vector=json.dumps(target_vector.tolist()),
-        context_vectors=json.dumps(_board_context_vectors(boards[0]) if boards else []),
+        context_vectors=json.dumps(_all_boards_context(boards)),
     )
 
 

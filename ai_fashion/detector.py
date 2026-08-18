@@ -66,23 +66,28 @@ FASHION_MAPPING = {
 }
 
 
-def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = None) -> str:
+def detect_item_type_with_confidence(image_path: Optional[str] = None, hint: Optional[str] = None) -> Tuple[str, float]:
     """
-    Detect the type of clothing item in the image.
-    Returns: 'top', 'outwear', 'bottom', or 'shoes'
+    Detect the type of clothing item in the image, plus a rough confidence
+    (0-1) — used to show a "we think this is X, correct it if wrong" step
+    instead of silently trusting a guess (the classifier can be very
+    confidently wrong on real photos, see README's Known Limitations).
+    A hint or filename-heuristic match returns confidence 1.0/0.3
+    respectively — no real notion of confidence there.
+    Returns: (type, confidence)
     """
     if hint:
         h = hint.lower()
         if any(k in h for k in ["shirt", "t-shirt", "tee", "sweater", "hoodie", "blouse", "polo", "tank", "vest top", "dress", "gown", "frock"]):
-            return "top"
+            return "top", 1.0
         if any(k in h for k in ["jacket", "coat", "blazer", "cardigan", "outwear"]):
-            return "outwear"
+            return "outwear", 1.0
         if any(k in h for k in ["pants", "jeans", "trousers", "shorts", "skirt", "bottom", "chinos"]):
-            return "bottom"
+            return "bottom", 1.0
         if any(k in h for k in ["shoe", "sneaker", "boot", "sandal", "loafer", "heel"]):
-            return "shoes"
+            return "shoes", 1.0
 
-    # Try trained DeepFashion2 classifier
+    # Try trained classifier
     if image_path and Path(image_path).exists():
         classifier, c_transform = _get_classifier()
         if classifier is not None:
@@ -90,7 +95,7 @@ def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = Non
                 predicted, confidence = predict_category(
                     image_path, classifier, c_transform, labels=CATEGORY_LABELS
                 )
-                return predicted
+                return predicted, float(confidence)
             except Exception as e:
                 print(f"Classifier failed: {e}. Falling back to MobileNet.")
 
@@ -104,7 +109,7 @@ def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = Non
                 probs = torch.nn.functional.softmax(prediction, dim=0)
                 class_id = probs.argmax().item()
                 if class_id in FASHION_MAPPING:
-                    return FASHION_MAPPING[class_id]
+                    return FASHION_MAPPING[class_id], float(probs[class_id])
         except Exception as e:
             print(f"MobileNet inference failed: {e}")
 
@@ -112,21 +117,29 @@ def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = Non
     if image_path:
         name = Path(image_path).name.lower()
         if any(k in name for k in ["tshirt", "t-shirt", "tee"]):
-            return "top"
+            return "top", 0.3
         if "shirt" in name:
-            return "top"
+            return "top", 0.3
         if any(k in name for k in ["sweater", "jumper", "hoodie"]):
-            return "top"
+            return "top", 0.3
         if any(k in name for k in ["jacket", "coat"]):
-            return "outwear"
+            return "outwear", 0.3
         if any(k in name for k in ["pants", "jeans", "trousers", "shorts"]):
-            return "bottom"
+            return "bottom", 0.3
         if "dress" in name:
-            return "top"
+            return "top", 0.3
         if "shoe" in name or "sneaker" in name or "boot" in name:
-            return "shoes"
+            return "shoes", 0.3
 
-    return "top"
+    return "top", 0.0
+
+
+def detect_item_type(image_path: Optional[str] = None, hint: Optional[str] = None) -> str:
+    """
+    Detect the type of clothing item in the image.
+    Returns: 'top', 'outwear', 'bottom', or 'shoes'
+    """
+    return detect_item_type_with_confidence(image_path, hint)[0]
 
 
 def detect_top_type(image_path: Optional[str] = None, hint: Optional[str] = None) -> Tuple[str, Optional[str]]:

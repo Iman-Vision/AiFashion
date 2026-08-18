@@ -14,6 +14,24 @@ except Exception:
 PATTERNS = ["solid", "checked", "striped_vertical", "striped_horizontal", "print"]
 TEXTURES = ["smooth", "textured"]
 
+def color_saturation_lightness(hex_color: str) -> Tuple[float, float]:
+    """HSV saturation + lightness (0-1 each) of a hex color."""
+    r, g, b = _hex_to_rgb01(hex_color)
+    hi, lo = max(r, g, b), min(r, g, b)
+    lightness = (hi + lo) / 2
+    sat = 0.0 if hi == lo else (hi - lo) / (1 - abs(2 * lightness - 1))
+    return sat, lightness
+
+
+def neutral_counterpart(hex_color: str) -> str:
+    """A versatile neutral that contrasts in lightness with a bold color —
+    e.g. a bright pink/red top pairs well with black or charcoal, a dark
+    saturated color with cream/white. Only meaningful for saturated colors;
+    callers should check color_saturation_lightness() first."""
+    _, lightness = color_saturation_lightness(hex_color)
+    return "#f5f0e8" if lightness < 0.5 else "#1f2023"
+
+
 def _hex_to_rgb01(hex_color: str) -> Tuple[float, float, float]:
     c = hex_color.lstrip("#")
     if len(c) != 6:

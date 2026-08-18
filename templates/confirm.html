@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Confirm what you uploaded</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="bg">
+  <div class="container">
+    <div class="hero">
+      <h1>Is this right?</h1>
+      <p>Auto-detection can miss real-world photos (a person wearing it, not a flat product shot) — confirm or correct each one before we build your mood boards.</p>
+    </div>
+    <form class="panel" action="{{ url_for('generate') }}" method="post">
+      {% for item in items %}
+      {% set item_idx = loop.index0 %}
+      <div class="card confirm-item">
+        <img src="{{ item.url }}" alt="upload preview" class="confirm-preview">
+        <div class="confirm-fields">
+          <div class="note" style="margin:0 0 10px">
+            Detected: <strong>{{ item.detected|title }}</strong>
+            ({{ (item.confidence * 100)|round|int }}% confidence)
+          </div>
+          <input type="hidden" name="path" value="{{ item.path }}">
+          <div class="check-list">
+            {% for value, label in [('top','Top'), ('outwear','Outwear'), ('bottom','Bottom'), ('shoes','Shoes')] %}
+            <label class="check-item">
+              <input type="radio" name="type_{{ item_idx }}" value="{{ value }}" {% if item.detected == value %}checked{% endif %}>
+              {{ label }}
+            </label>
+            {% endfor %}
+            {% if allow_mixed %}
+            <label class="check-item">
+              <input type="radio" name="type_{{ item_idx }}" value="mixed">
+              Mixed / full outfit (use as style reference only — don't lock any one piece)
+            </label>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      <div class="actions">
+        <button class="btn primary" type="submit">Generate Mood Boards</button>
+      </div>
+    </form>
+  </div>
+  <button type="button" id="themeFloating" class="theme-toggle" aria-label="Toggle theme">
+    <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
+  </button>
+  <script>
+    function applyTheme() {
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark') document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+    function updateIcons(){
+      const t = localStorage.getItem('theme') || 'light';
+      if (t === 'dark'){ document.querySelector('.icon-sun').style.display='none'; document.querySelector('.icon-moon').style.display='inline'; }
+      else { document.querySelector('.icon-sun').style.display='inline'; document.querySelector('.icon-moon').style.display='none'; }
+    }
+    document.getElementById('themeFloating').addEventListener('click', () => {
+      const current = localStorage.getItem('theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', next);
+      applyTheme();
+      updateIcons();
+    });
+    applyTheme(); updateIcons();
+  </script>
+</body>
+</html>

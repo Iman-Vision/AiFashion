@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from ai_fashion.analyzer import cosine_similarity, feature_vector
+from ai_fashion.analyzer import cosine_similarity, feature_vector, color_saturation_lightness, neutral_counterpart
 
 BASE_DIR = Path(__file__).parent.parent
 GALLERY_INDEX_PATH = BASE_DIR / "models" / "gallery_index.json"
@@ -233,12 +233,35 @@ def _combo_score(target_vector: np.ndarray, items: List[Item]) -> float:
     return 0.6 * to_target + 0.4 * coherence
 
 
-def build_boards(known: Dict[str, Item], target_vector: np.ndarray, palette: List[str], count: int = 3) -> List[Board]:
+def _ranked_combos(known: Dict[str, Item], missing: List[str], target_vector: np.ndarray, pool_size: int) -> List[Dict[str, Item]]:
+    candidates = {
+        slot: _find_best_items(target_vector, ITEM_POOL[_SLOT_TO_POOL_KEY[slot]], count=pool_size)
+        for slot in missing
+    }
+    combos = [
+        dict(zip(missing, picks))
+        for picks in itertools.product(*(candidates[slot] for slot in missing))
+    ]
+    combos.sort(
+        key=lambda combo: _combo_score(target_vector, list(known.values()) + list(combo.values())),
+        reverse=True,
+    )
+    return combos
+
+
+def build_boards(known: Dict[str, Item], targets: List[np.ndarray], palette: List[str], count: int = 3) -> List[Board]:
     """Build up to `count` style-coherent boards. `known` holds the slots the
     caller already has real photos for (top/bottom/shoes -> Item); every
-    other essential slot is filled from the pool. Boards are ranked so the
-    filled-in pieces work with the source look AND with each other, not just
-    independently ranked lists zipped by index."""
+    other essential slot is filled from the pool.
+
+    `targets` is a list of one-or-more target vectors, cycled round-robin
+    across the returned boards (repeating the last one if `count` exceeds
+    its length). A single target only ever ranks candidates by closeness to
+    one color, which reliably clusters same-hue results across every board
+    (a saturated pink top gets pink bottoms on every single board); passing
+    e.g. [true_color, neutral_counterpart] guarantees at least one board
+    offers a genuinely different, still-coherent pairing instead of relying
+    on incidental pool diversity to happen to break the tie."""
     missing = [s for s in ESSENTIAL_SLOTS if s not in known]
 
     if not missing:
@@ -249,37 +272,46 @@ def build_boards(known: Dict[str, Item], target_vector: np.ndarray, palette: Lis
     # Fewer candidates per slot as more slots are missing, so the combo
     # count (candidates ** missing_slots) stays cheap regardless of how
     # many essential slots need filling.
-    candidate_pool = max(count * 3, 6) if len(missing) <= 2 else count + 3
-    candidates = {
-        slot: _find_best_items(target_vector, ITEM_POOL[_SLOT_TO_POOL_KEY[slot]], count=candidate_pool)
-        for slot in missing
-    }
-
-    combos = [
-        dict(zip(missing, picks))
-        for picks in itertools.product(*(candidates[slot] for slot in missing))
-    ]
-    combos.sort(
-        key=lambda combo: _combo_score(target_vector, list(known.values()) + list(combo.values())),
-        reverse=True,
-    )
+    pool_size = max(count * 3, 6) if len(missing) <= 2 else count + 3
 
     boards: List[Board] = []
     used_images = {item["image"] for item in known.values()}
-    for combo in combos:
-        if any(item["image"] in used_images for item in combo.values()):
-            continue
-        board = dict(known)
-        board.update(combo)
-        board["style"] = f"style_match_{len(boards) + 1}"
-        board["title"] = f"Style Match {len(boards) + 1}"
-        board["palette"] = palette
-        boards.append(board)
-        used_images.update(item["image"] for item in combo.values())
-        if len(boards) >= count:
+    for i in range(count):
+        target = targets[min(i, len(targets) - 1)]
+        combos = _ranked_combos(known, missing, target, pool_size)
+        for combo in combos:
+            if any(item["image"] in used_images for item in combo.values()):
+                continue
+            board = dict(known)
+            board.update(combo)
+            board["style"] = f"style_match_{len(boards) + 1}"
+            board["title"] = f"Style Match {len(boards) + 1}"
+            board["palette"] = palette
+            boards.append(board)
+            used_images.update(item["image"] for item in combo.values())
             break
 
     return boards
+
+
+def _targets_and_palette(features: Dict[str, object]) -> tuple:
+    dom = features.get("dominant_colors") or []
+    base_hex = dom[0] if dom else "#cccccc"
+    pattern = str(features.get("pattern", "solid"))
+    texture = str(features.get("texture", "smooth"))
+    target_vector = feature_vector(base_hex, pattern, texture)
+    palette = dom[:3] if dom else ["#ffffff", "#eeeeee", "#cccccc"]
+
+    targets = [target_vector]
+    saturation, _ = color_saturation_lightness(base_hex)
+    if saturation >= 0.35:
+        # A bold color (bright pink, red, etc.) reliably pulls same-hue
+        # matches on every board if ranked by color-closeness alone — add
+        # a neutral-paired variant so at least one board offers a genuinely
+        # different, still-flattering option instead of pink-on-pink ×3.
+        neutral_vector = feature_vector(neutral_counterpart(base_hex), pattern, texture)
+        targets.append(neutral_vector)
+    return targets, target_vector, palette
 
 
 def recommend_from_features(item_type: str, features: Dict[str, object], count: int = 3) -> List[Board]:
@@ -288,18 +320,23 @@ def recommend_from_features(item_type: str, features: Dict[str, object], count: 
     texture) and each candidate, then build `count` style-coherent boards
     around it. The uploaded item's own slot is left for the caller to fill
     in with the real photo (see UPLOADED_SLOT)."""
-    dom = features.get("dominant_colors") or []
-    base_hex = dom[0] if dom else "#cccccc"
-    pattern = str(features.get("pattern", "solid"))
-    texture = str(features.get("texture", "smooth"))
-    target_vector = feature_vector(base_hex, pattern, texture)
-    palette = dom[:3] if dom else ["#ffffff", "#eeeeee", "#cccccc"]
+    targets, target_vector, palette = _targets_and_palette(features)
 
     slot = UPLOADED_SLOT.get(item_type, "top")
     # placeholder so `slot` counts as "known" and is excluded from candidates;
     # the caller (app.py) overwrites this with the real uploaded image/name.
     known = {slot: {"name": None, "image": None, "vector": target_vector.tolist()}}
-    return build_boards(known, target_vector, palette, count=count)
+    return build_boards(known, targets, palette, count=count)
+
+
+def recommend_style_reference(features: Dict[str, object], count: int = 3) -> List[Board]:
+    """'Mixed / full outfit' mode: the uploaded photo isn't confidently any
+    single top/bottom/shoes (e.g. it shows a whole outfit, or the user just
+    isn't sure) — use its color/pattern/texture purely as a style reference
+    and fill *all three* essential slots from the pool, instead of forcing
+    it into one slot the way recommend_from_features does."""
+    targets, _, palette = _targets_and_palette(features)
+    return build_boards({}, targets, palette, count=count)
 
 
 def recommend_from_uploads(uploaded: Dict[str, Item], count: int = 3) -> List[Board]:
@@ -310,4 +347,4 @@ def recommend_from_uploads(uploaded: Dict[str, Item], count: int = 3) -> List[Bo
     vectors = [item["vector"] for item in uploaded.values() if "vector" in item]
     target_vector = np.mean(vectors, axis=0) if vectors else feature_vector("#cccccc")
     palette = ["#111111", "#f5f5f5", "#cccccc"]
-    return build_boards(uploaded, target_vector, palette, count=count)
+    return build_boards(uploaded, [target_vector], palette, count=count)

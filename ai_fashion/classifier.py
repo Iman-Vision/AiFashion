@@ -151,28 +151,24 @@ def train_classifier(
 
     transform = classifier_transform(image_size)
 
-    # Training data is 100% flat product-catalog shots (garment centered,
-    # filling the frame, white background) — real user uploads are often a
-    # person wearing the item, off-center, at an angle, with a cluttered
-    # background. Without simulating that gap during training, the model
-    # overfits to "centered flat product" and mispredicts confidently on
-    # anything else (verified: a real photo mispredicted "shoes" at 99.97%).
-    # RandomResizedCrop/erasing approximate that gap cheaply; RandomPerspective
-    # was dropped — correct in principle but slow enough on CPU (num_workers=0)
-    # that a 14-epoch run didn't finish a single checkpoint in 50 minutes.
+    # Training data is 100% flat product-catalog shots. A heavier-augmentation
+    # variant (random-resized-crop, color jitter, random erasing) was tried
+    # to reduce overfitting to that pattern, but it didn't fix real-photo
+    # misclassification and cost confidence on the catalog-style photos this
+    # is actually good at — reverted. Real fix for on-model photos needs
+    # on-model training data, not more augmentation on flat shots (see
+    # README's Known Limitations); the app now asks the user to confirm/
+    # correct the detected type instead of trusting a shaky guess blindly.
     train_transform = T.Compose([
-        T.RandomResizedCrop(image_size, scale=(0.5, 1.0), ratio=(0.7, 1.3)),
+        T.Resize((image_size, image_size)),
         T.RandomHorizontalFlip(),
-        T.RandomRotation(15),
-        T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
+        T.RandomRotation(10),
+        T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
         T.ToTensor(),
-        T.RandomErasing(p=0.3, scale=(0.02, 0.15)),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     dataset = ImageFolder(data_dir, transform=train_transform)
-    # num_workers>0 parallelizes the (still CPU-heavy) augmentation across
-    # cores instead of blocking the training loop on it serially.
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, persistent_workers=True)
 
     if labels is None:
