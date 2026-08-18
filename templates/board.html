@@ -62,7 +62,6 @@
               <span class="swatch" style="background:{{ pal[1] }}"></span>
               <span class="swatch" style="background:{{ pal[2] }}"></span>
             </div>
-            <div class="acc-strip"></div>
           </div>
         </section>
         {% endfor %}
@@ -100,11 +99,17 @@
     // one context-vector list per board, indexed same as data-board-index
     const boardContexts = {{ (context_vectors or '[]') | safe }};
 
-    function addOutwearToBoard(canvas, item) {
-      let figure = canvas.querySelector('.p-outwear');
+    // Every add-on (outwear or any accessory category) becomes a full
+    // piece card in the grid — same size/treatment as top/bottom/shoes,
+    // genuinely part of the moodboard rather than a small floating chip.
+    // One card per category per board; re-adding the same category
+    // replaces its card instead of duplicating it.
+    function addPieceToBoard(canvas, category, item) {
+      const slotClass = 'p-add-' + category;
+      let figure = canvas.querySelector('.' + slotClass);
       if (!figure) {
         figure = document.createElement('figure');
-        figure.className = 'piece p-outwear';
+        figure.className = 'piece ' + slotClass;
         const img = document.createElement('img');
         const cap = document.createElement('figcaption');
         cap.className = 'cap';
@@ -115,18 +120,6 @@
       figure.querySelector('img').src = item.image;
       figure.querySelector('img').alt = item.name;
       figure.querySelector('figcaption').textContent = item.name;
-    }
-
-    function addAccessoryChip(canvas, item) {
-      const strip = canvas.querySelector('.acc-strip');
-      const chip = document.createElement('div');
-      chip.className = 'acc-chip';
-      chip.title = item.name;
-      const img = document.createElement('img');
-      img.src = item.image;
-      img.alt = item.name;
-      chip.appendChild(img);
-      strip.appendChild(chip);
     }
 
     async function fetchBest(category, context) {
@@ -152,8 +145,7 @@
           const label = box.parentElement.textContent.trim();
           const best = await fetchBest(category, context);
           if (best && best.fits) {
-            if (category === 'outwear') addOutwearToBoard(canvas, best);
-            else addAccessoryChip(canvas, best);
+            addPieceToBoard(canvas, category, best);
           } else {
             (skippedByBoard[idx] = skippedByBoard[idx] || []).push(label);
           }

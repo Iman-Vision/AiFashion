@@ -25,6 +25,7 @@ _model = None
 _preprocess = None
 _classifier = None
 _classifier_transform = None
+_classifier_load_attempted = False
 
 
 def _get_mobilenet():
@@ -38,14 +39,18 @@ def _get_mobilenet():
 
 
 def _get_classifier():
-    global _classifier, _classifier_transform
-    if _classifier is None:
+    global _classifier, _classifier_transform, _classifier_load_attempted
+    if _classifier is None and not _classifier_load_attempted:
+        _classifier_load_attempted = True
         try:
             _classifier, _classifier_transform = load_classifier()
         except Exception as e:
             # e.g. a checkpoint saved under a different CATEGORY_LABELS
-            # (size mismatch) — fall back to MobileNet rather than crash.
-            print(f"Classifier checkpoint incompatible ({e}). Falling back to MobileNet.")
+            # (size mismatch), or mid-write/corrupt — fall back to
+            # MobileNet rather than crash. Logged once, not on every
+            # request — a failed load isn't going to start succeeding
+            # without a code change or a process restart.
+            print(f"Classifier checkpoint unusable ({e}). Falling back to MobileNet for this process's lifetime.")
             _classifier, _classifier_transform = None, classifier_transform()
     return _classifier, _classifier_transform
 

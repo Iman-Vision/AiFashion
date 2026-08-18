@@ -157,12 +157,13 @@ def train_classifier(
     # background. Without simulating that gap during training, the model
     # overfits to "centered flat product" and mispredicts confidently on
     # anything else (verified: a real photo mispredicted "shoes" at 99.97%).
-    # RandomResizedCrop/perspective/erasing approximate that gap.
+    # RandomResizedCrop/erasing approximate that gap cheaply; RandomPerspective
+    # was dropped — correct in principle but slow enough on CPU (num_workers=0)
+    # that a 14-epoch run didn't finish a single checkpoint in 50 minutes.
     train_transform = T.Compose([
         T.RandomResizedCrop(image_size, scale=(0.5, 1.0), ratio=(0.7, 1.3)),
         T.RandomHorizontalFlip(),
         T.RandomRotation(15),
-        T.RandomPerspective(distortion_scale=0.3, p=0.4),
         T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
         T.ToTensor(),
         T.RandomErasing(p=0.3, scale=(0.02, 0.15)),
@@ -170,7 +171,9 @@ def train_classifier(
     ])
 
     dataset = ImageFolder(data_dir, transform=train_transform)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    # num_workers>0 parallelizes the (still CPU-heavy) augmentation across
+    # cores instead of blocking the training loop on it serially.
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, persistent_workers=True)
 
     if labels is None:
         labels = dataset.classes
@@ -209,7 +212,14 @@ def train_classifier(
 
         if avg_loss < best_loss:
             best_loss = avg_loss
-            torch.save(model.state_dict(), model_out_path)
+            # torch.save truncates the destination immediately, so saving
+            # straight to model_out_path would wipe the last-good checkpoint
+            # the instant a new one starts writing — if the process dies
+            # mid-write (killed, crash, OOM) the file is left empty/corrupt.
+            # Write to a temp file and atomically replace instead.
+            tmp_path = model_out_path.with_suffix(model_out_path.suffix + ".tmp")
+            torch.save(model.state_dict(), tmp_path)
+            tmp_path.replace(model_out_path)
             print(f"  Saved best model (loss: {avg_loss:.4f})")
 
     print(f"\nTraining complete. Best loss: {best_loss:.4f}")
