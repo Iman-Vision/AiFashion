@@ -15,9 +15,18 @@ dress-like uploads are treated as tops.)
 Detection tries three things in order, falling back gracefully if one fails:
 
 1. **`models/clothing_classifier.pt`** — a MobileNetV3-Small CNN, fine-tuned
-   on ~16,000 real photos sampled from the dataset (4,000 per category — see
-   [Retraining](#retraining-the-classifier) below). This is the accurate
-   path; when it loads it typically predicts with 90–100% confidence.
+   on ~16,000 photos sampled from the dataset (4,000 per category — see
+   [Retraining](#rebuilding-the-data-only-needed-if-you-want-to-change-it)
+   below). Scores 90–100% on catalog-style photos, but the training set is
+   entirely *flat product-catalog shots* (garment centered, filling the
+   frame, white background) — real lifestyle photos (a person wearing the
+   item, off-center, cluttered background) are out-of-distribution and can
+   get confidently misclassified (a real photo of a person in a blouse was
+   once scored "shoes" at 99.97% confidence). Training now uses heavier
+   augmentation (`RandomResizedCrop`, perspective jitter, random erasing —
+   see `classifier.py`'s `train_classifier`) to close that gap, but it's a
+   real limitation, not something one flag fixes — the dataset itself has
+   zero on-model photos to learn from.
 2. **MobileNet + ImageNet mapping** — if the classifier checkpoint is
    missing or incompatible (e.g. its label count doesn't match
    `CATEGORY_LABELS` after a code change), falls back to a generic
@@ -84,20 +93,36 @@ Upload 2–3 of your own photos (e.g. your actual top + pants + shoes) and
 `recommend_from_uploads()` builds **one board from your real pieces**,
 filling in only whatever essential slot you didn't provide.
 
-### 5. Sidebar — accessories & outwear, opt-in only
+### 5. Sidebar — accessories & outwear, opt-in only, per-board
 
-Accessories (jewelry/bags/glasses/watches/hats) and an extra outwear layer
-are **never baked into the initial board**. The sidebar's "Find Matches"
-calls `/suggest`, which scores candidates against the actual pieces already
-on the board (not just the original upload) via `suggest_additions()`.
-Each result carries a `fits` flag (cosine similarity ≥ `FIT_THRESHOLD`,
-currently `0.55`, against the board's pieces):
+Accessories and an extra outwear layer are **never baked into the initial
+board**. The sidebar lists every accessory category *as it actually exists
+in the dataset* (bag, bracelet, brooch, earrings, eyewear, gloves, hairwear,
+hats, necklace, neckwear, rings, watches) plus an outwear-layer checkbox —
+no vague umbrella groupings.
 
-- **Outwear that fits** → "+ Add" splices a real `.p-outwear` card directly
-  into the moodboard.
-- **Everything else** (accessories, or outwear that scored too low) → "+ Add"
-  drops it into the "Added to your look" strip in the sidebar instead —
-  it's a suggestion, not forced onto the board.
+Tick whichever you want and hit "Add Selected". For **each of the 3
+boards independently**, and for each ticked category, it calls `/suggest`
+with that specific board's own pieces as context (`suggest_additions()`) —
+so a bracelet that suits board 1's color palette but clashes with board 2's
+isn't forced onto both. Each candidate carries a `fits` flag (cosine
+similarity ≥ `FIT_THRESHOLD`, currently `0.55`, against that board's own
+pieces):
+
+- **Outwear that fits** → splices a real piece card directly into that
+  board's grid.
+- **Anything that fits (accessories)** → appended as a small chip in that
+  board's footer strip.
+- **Doesn't fit** → skipped for that board, and named in the "skipped"
+  note under the button (e.g. "Board 2: skipped Rings, Hats") — never
+  forced on.
+
+The board grid itself uses CSS Grid (`.piece-grid`, `auto-fit` columns),
+not hand-placed pixel coordinates — pieces keep a slight rotation each for
+the scattered-photos look, but the grid guarantees cards can never overlap,
+regardless of container width or how many pieces/add-ons a board ends up
+with. (An earlier pixel-coordinate version did overlap under real layout
+conditions — that's why this changed.)
 
 ## Running it
 
@@ -183,6 +208,11 @@ dataset/                classifier training images (gitignored, ~800MB)
 
 ## Known limitations
 
+- **Real-world photo accuracy**: the classifier is trained entirely on flat
+  product-catalog shots (see step 1 above) — it can still misclassify a
+  real "person wearing the item" photo, even confidently. Heavier
+  augmentation helps but doesn't fully close this gap without actual
+  on-model training data, which the source dataset doesn't have.
 - Shoe formality is a silhouette *heuristic*, not ground truth — it will
   misjudge some shoes (e.g. a flat but narrow dress shoe, or a chunky
   platform heel).

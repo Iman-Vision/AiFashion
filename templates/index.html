@@ -6,54 +6,44 @@
   <title>AI Fashion Accessorizer</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body class="bg">
   <div class="container">
-    <div class="appbar">
-      <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">AI</span> Fashion Accessorizer</a>
-    </div>
     <div class="hero">
       <h1>AI Fashion Accessorizer</h1>
       <p>Drop one photo for instant matches, or upload your own top/bottom/shoes together (up to 3) to build one board from your real pieces.</p>
       {% if request.args.get('error') == 'missing_image' %}
-      <div class="alert">Please upload a photo or capture from camera.</div>
+      <div class="note">Please upload a photo or capture from camera.</div>
       {% endif %}
     </div>
-    <form class="panel" id="analyzeForm" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data">
+    <form class="panel" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data">
       <div class="grid g2">
         <div class="card upload">
-          <h2>📷 Upload</h2>
+          <h2>Upload</h2>
           <div class="drop" id="drop">
             <input id="file" type="file" name="image" accept="image/*" multiple class="file" aria-label="Choose image(s)">
-            <div class="drop-icon">🖼️</div>
             <div class="drop-hint">Drag & drop or click to select — 1 photo for instant matches, or up to 3 (top/bottom/shoes) for your own board</div>
             <div id="previewList" class="preview-list"></div>
           </div>
         </div>
         <div class="card camera">
-          <h2>🎥 Camera</h2>
+          <h2>Camera</h2>
           <video id="video" autoplay playsinline></video>
           <canvas id="canvas" width="640" height="480" style="display:none"></canvas>
           <div class="row">
-            <button type="button" id="startBtn" class="btn ghost">Start Camera</button>
-            <button type="button" id="captureBtn" class="btn ghost">Capture Frame</button>
+            <button type="button" id="startBtn" class="btn">Start Camera</button>
+            <button type="button" id="captureBtn" class="btn">Capture Frame</button>
           </div>
           <input type="hidden" name="camera_image" id="camera_image"/>
         </div>
       </div>
       <div class="actions">
-        <button id="submitBtn" class="btn" type="submit" disabled>Create Mood Boards</button>
+        <button id="submitBtn" class="btn primary" type="submit" disabled>Create Mood Boards</button>
       </div>
-      <div class="note">We'll automatically detect whether each photo is a top, outwear, bottom, or shoes.</div>
+      <div class="note">We will automatically detect whether the image is upper, lower or shoes.</div>
     </form>
     <footer class="foot">
       <div>Creative, color-harmonized looks from your image.</div>
     </footer>
-  </div>
-  <div class="submit-overlay" id="submitOverlay">
-    <div class="submit-overlay-card">
-      <span class="spinner"></span>
-      <div>Analyzing your photo and building mood boards…</div>
-    </div>
   </div>
   <button type="button" id="themeFloating" class="theme-toggle" aria-label="Toggle theme">
     <span class="icon-sun">☀️</span><span class="icon-moon">🌙</span>
@@ -69,8 +59,6 @@
     const submitBtn = document.getElementById('submitBtn');
     const drop = document.getElementById('drop');
     const themeFloating = document.getElementById('themeFloating');
-    const analyzeForm = document.getElementById('analyzeForm');
-    const submitOverlay = document.getElementById('submitOverlay');
     let stream = null;
     let selectedFiles = []; // our own source of truth — native FileList can't be edited in place
     let cameraCapture = null; // dataURL string, or null
@@ -133,8 +121,7 @@
     file.addEventListener('change', () => {
       if (file.files && file.files.length) addFiles(file.files);
     });
-    ;['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation(); drop.classList.add('drag');}));
-    ;['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag');}));
+    ;['dragenter','dragover','dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation();}));
     drop.addEventListener('drop', e=>{
       const dt = e.dataTransfer;
       if (dt && dt.files && dt.files.length) addFiles(dt.files);
@@ -157,9 +144,6 @@
       hidden.value = cameraCapture;
       renderPreviews();
       updateSubmit();
-    });
-    analyzeForm.addEventListener('submit', () => {
-      submitOverlay.classList.add('active');
     });
     function applyTheme() {
       const t = localStorage.getItem('theme') || 'light';

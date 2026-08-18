@@ -151,12 +151,21 @@ def train_classifier(
 
     transform = classifier_transform(image_size)
 
+    # Training data is 100% flat product-catalog shots (garment centered,
+    # filling the frame, white background) — real user uploads are often a
+    # person wearing the item, off-center, at an angle, with a cluttered
+    # background. Without simulating that gap during training, the model
+    # overfits to "centered flat product" and mispredicts confidently on
+    # anything else (verified: a real photo mispredicted "shoes" at 99.97%).
+    # RandomResizedCrop/perspective/erasing approximate that gap.
     train_transform = T.Compose([
-        T.Resize((image_size, image_size)),
+        T.RandomResizedCrop(image_size, scale=(0.5, 1.0), ratio=(0.7, 1.3)),
         T.RandomHorizontalFlip(),
-        T.RandomRotation(10),
-        T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+        T.RandomRotation(15),
+        T.RandomPerspective(distortion_scale=0.3, p=0.4),
+        T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
         T.ToTensor(),
+        T.RandomErasing(p=0.3, scale=(0.02, 0.15)),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 

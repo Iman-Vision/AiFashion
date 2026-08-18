@@ -92,6 +92,12 @@ def _board_context_vectors(board) -> list:
     return [np.array(board[s]["vector"]).tolist() for s in ESSENTIAL_SLOTS if board.get(s) and "vector" in board[s]]
 
 
+def _all_boards_context(boards) -> list:
+    """One context-vector list per board, so 'what fits' is judged against
+    each board's own pieces, not just the first board's."""
+    return [_board_context_vectors(b) for b in boards]
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     img_files = [f for f in request.files.getlist("image") if f and f.filename]
@@ -124,7 +130,7 @@ def analyze():
             uploaded_label=display_type,
             features=feats,
             target_vector=json.dumps(target_vector.tolist()),
-            context_vectors=json.dumps(_board_context_vectors(boards[0]) if boards else []),
+            context_vectors=json.dumps(_all_boards_context(boards)),
         )
 
     # Multiple photos: detect each, place it in its own slot, and build

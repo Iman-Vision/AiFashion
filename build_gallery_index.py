@@ -53,11 +53,13 @@ SLOT_MAP = {
     "watches": "accessories",
 }
 
-# Sub-label shown/used for accessory category badges.
+# Sidebar checkbox categories = the dataset's own folder names directly
+# (no umbrella "jewelry"/"accessory" grouping) so "what's this option" always
+# maps to a real, named category that's actually in the dataset.
 ACCESSORY_LABEL = {
-    "bag": "bag", "bracelet": "jewelry", "brooch": "jewelry", "earrings": "jewelry",
-    "eyewear": "glasses", "gloves": "accessory", "hairwear": "hair", "hats": "hats",
-    "necklace": "jewelry", "neckwear": "accessory", "rings": "jewelry", "watches": "watch",
+    "bag": "bag", "bracelet": "bracelet", "brooch": "brooch", "earrings": "earrings",
+    "eyewear": "eyewear", "gloves": "gloves", "hairwear": "hairwear", "hats": "hats",
+    "necklace": "necklace", "neckwear": "neckwear", "rings": "rings", "watches": "watches",
 }
 
 NAME_OVERRIDE = {
