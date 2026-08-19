@@ -31,6 +31,25 @@ DISPLAY_TYPE = {
 }
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+# Dev environment: Docker's bind-mount on Windows can report stale file
+# mtimes, so Flask's static-file caching (ETag/Last-Modified) can tell the
+# browser "unchanged" (304) even right after a CSS/JS edit — the browser
+# then keeps rendering the old file. Disable that caching entirely here.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+
+@app.after_request
+def _no_cache_static(response):
+    # send_file (used by the static route) sets a structured cache_control
+    # object that re-serializes onto the raw header at finalize, silently
+    # clobbering a plain `response.headers["Cache-Control"] = ...` string —
+    # has to go through the same structured API to actually stick.
+    if request.path.startswith("/static/"):
+        response.cache_control.no_cache = True
+        response.cache_control.no_store = True
+        response.cache_control.must_revalidate = True
+        response.cache_control.max_age = 0
+    return response
 
 
 @app.route("/")
@@ -65,19 +84,32 @@ def _save_camera_capture(data_uri: str) -> str:
     return str(path)
 
 
-def _feature_vector_for(feats, saved_path: str = None, item_type: str = None) -> np.ndarray:
-    dom = feats.get("dominant_colors") or []
-    formality = "neutral"
+def _formality_for(item_type: str, saved_path: str = None) -> str:
     if item_type == "shoes" and saved_path:
         try:
-            formality = estimate_shoe_formality(_open_image(saved_path))
+            return estimate_shoe_formality(_open_image(saved_path))
         except Exception:
-            pass
+            return "neutral"
+    if item_type in ("top", "outwear"):
+        # "Neutral" here doesn't mean flexible — cosine similarity scores a
+        # neutral [0.5,0.5] target equally against casual and dressy bottom
+        # candidates, so it does nothing to steer the bottom choice. If the
+        # bottom then lands on a skirt by pure color luck, the combo-scoring
+        # coherence term drags shoes toward dressy to match it (heels), even
+        # though a plain tee never asked for that. Default a top/outwear
+        # upload to casual — the sane majority assumption absent any signal
+        # this is formal wear specifically.
+        return "casual"
+    return "neutral"
+
+
+def _feature_vector_for(feats, saved_path: str = None, item_type: str = None) -> np.ndarray:
+    dom = feats.get("dominant_colors") or []
     return feature_vector(
         dom[0] if dom else "#cccccc",
         str(feats.get("pattern", "solid")),
         str(feats.get("texture", "smooth")),
-        formality,
+        _formality_for(item_type, saved_path),
     )
 
 
@@ -92,8 +124,12 @@ def _all_boards_context(boards) -> list:
 
 
 # Below this, the model isn't confident enough to trust silently — ask.
-# At or above it, just build the boards straight away; interrupting a
-# confident, almost-certainly-correct guess is friction with no upside.
+# At or above it, just build the boards straight away. Was briefly raised
+# to 0.99 to catch one confidently-wrong shirt/outwear case, but at that
+# bar almost nothing clears it and the confirm step fires on nearly every
+# upload — traded a rare bad guess for near-constant interruption, which is
+# worse. Back to 0.85: mostly silent, occasionally wrong on a genuine
+# top/outwear boundary case.
 CONFIDENCE_THRESHOLD = 0.85
 
 
@@ -158,7 +194,7 @@ def _build_boards_response(paths: list, confirmed_types: list):
             display_type = "Full Outfit"
         else:
             target_vector = _feature_vector_for(feats, saved_path, confirmed)
-            boards = recommend_from_features(confirmed, feats, count=3)
+            boards = recommend_from_features(confirmed, feats, count=3, formality=_formality_for(confirmed, saved_path))
             display_type = DISPLAY_TYPE.get(confirmed, confirmed.title())
             uploaded_slot = UPLOADED_SLOT.get(confirmed)
             if uploaded_slot:

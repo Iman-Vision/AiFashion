@@ -294,12 +294,12 @@ def build_boards(known: Dict[str, Item], targets: List[np.ndarray], palette: Lis
     return boards
 
 
-def _targets_and_palette(features: Dict[str, object]) -> tuple:
+def _targets_and_palette(features: Dict[str, object], formality: str = "neutral") -> tuple:
     dom = features.get("dominant_colors") or []
     base_hex = dom[0] if dom else "#cccccc"
     pattern = str(features.get("pattern", "solid"))
     texture = str(features.get("texture", "smooth"))
-    target_vector = feature_vector(base_hex, pattern, texture)
+    target_vector = feature_vector(base_hex, pattern, texture, formality)
     palette = dom[:3] if dom else ["#ffffff", "#eeeeee", "#cccccc"]
 
     targets = [target_vector]
@@ -309,18 +309,25 @@ def _targets_and_palette(features: Dict[str, object]) -> tuple:
         # matches on every board if ranked by color-closeness alone — add
         # a neutral-paired variant so at least one board offers a genuinely
         # different, still-flattering option instead of pink-on-pink ×3.
-        neutral_vector = feature_vector(neutral_counterpart(base_hex), pattern, texture)
+        neutral_vector = feature_vector(neutral_counterpart(base_hex), pattern, texture, formality)
         targets.append(neutral_vector)
     return targets, target_vector, palette
 
 
-def recommend_from_features(item_type: str, features: Dict[str, object], count: int = 3) -> List[Board]:
+def recommend_from_features(item_type: str, features: Dict[str, object], count: int = 3, formality: str = "neutral") -> List[Board]:
     """Detect-one-item flow: rank the pool by cosine similarity between the
     uploaded item's handcrafted feature vector (dominant color + pattern +
-    texture) and each candidate, then build `count` style-coherent boards
-    around it. The uploaded item's own slot is left for the caller to fill
-    in with the real photo (see UPLOADED_SLOT)."""
-    targets, target_vector, palette = _targets_and_palette(features)
+    texture + formality) and each candidate, then build `count`
+    style-coherent boards around it. `formality` is the caller's best guess
+    for the uploaded item itself (e.g. app.py infers "casual" for a plain
+    top/outwear, or a silhouette-based guess for shoes) — without it every
+    upload defaults formality-neutral, which does nothing to steer bottom
+    candidates toward casual vs. dressy, so a same-color dressy skirt can
+    win on looks alone and then drag shoe matching toward heels via the
+    combo-coherence scoring even though the uploaded top never asked for
+    that. The uploaded item's own slot is left for the caller to fill in
+    with the real photo (see UPLOADED_SLOT)."""
+    targets, target_vector, palette = _targets_and_palette(features, formality)
 
     slot = UPLOADED_SLOT.get(item_type, "top")
     # placeholder so `slot` counts as "known" and is excluded from candidates;
