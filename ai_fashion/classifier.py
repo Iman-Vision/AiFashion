@@ -2,10 +2,12 @@
 Clothing Classifier using transfer learning with MobileNetV3.
 Trained on DeepFashion2 categories.
 """
+import random
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms as T
 from torchvision.datasets import ImageFolder
 from pathlib import Path
@@ -134,6 +136,22 @@ def predict_category(
     return labels[idx], confidence.item()
 
 
+def _evaluate(model, loader, device) -> float:
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, targets in loader:
+            images = images.to(device)
+            targets = targets.to(device)
+            outputs = model(images)
+            _, predicted = outputs.max(1)
+            correct += predicted.eq(targets).sum().item()
+            total += targets.size(0)
+    model.train()
+    return 100.0 * correct / max(1, total)
+
+
 def train_classifier(
     data_dir: str,
     model_out: Optional[str] = None,
@@ -144,12 +162,15 @@ def train_classifier(
     device: Optional[torch.device] = None,
     num_classes: int = len(CATEGORY_LABELS),
     labels: Optional[List[str]] = None,
-) -> None:
+    val_split: float = 0.15,
+) -> float:
+    """Trains the classifier, holding out `val_split` of the data as a
+    never-trained-on test set, and returns its final held-out accuracy.
+    Training-loop accuracy alone is meaningless for generalization — it's
+    graded on data the model has already seen/memorized."""
     device = device or get_device()
     model_out_path = Path(model_out) if model_out else CLASSIFIER_PATH
     model_out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    transform = classifier_transform(image_size)
 
     # Training data is 100% flat product-catalog shots. A heavier-augmentation
     # variant (random-resized-crop, color jitter, random erasing) was tried
@@ -167,22 +188,37 @@ def train_classifier(
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+    eval_transform = classifier_transform(image_size)  # same as real inference — no augmentation
 
-    dataset = ImageFolder(data_dir, transform=train_transform)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, persistent_workers=True)
+    # Two ImageFolder views of the same directory (file order is identical
+    # and deterministic) so the held-out split gets the plain eval transform
+    # instead of the training-time augmentation.
+    train_view = ImageFolder(data_dir, transform=train_transform)
+    eval_view = ImageFolder(data_dir, transform=eval_transform)
 
     if labels is None:
-        labels = dataset.classes
+        labels = train_view.classes
     num_classes = len(labels)
+
+    indices = list(range(len(train_view)))
+    random.Random(42).shuffle(indices)
+    split_at = int(len(indices) * (1 - val_split))
+    train_idx, val_idx = indices[:split_at], indices[split_at:]
+
+    train_subset = Subset(train_view, train_idx)
+    val_subset = Subset(eval_view, val_idx)
+    dataloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=4, persistent_workers=True)
+    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=2)
+
     print(f"Classes ({num_classes}): {labels}")
-    print(f"Training samples: {len(dataset)}")
+    print(f"Training samples: {len(train_subset)} | Held-out test samples: {len(val_subset)}")
 
     model = ClothingClassifier(num_classes=num_classes, pretrained=True).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.CrossEntropyLoss()
 
-    best_loss = float("inf")
+    best_val_acc = -1.0
     model.train()
     for epoch in range(1, epochs + 1):
         total_loss = 0.0
@@ -203,11 +239,12 @@ def train_classifier(
 
         scheduler.step()
         avg_loss = total_loss / max(1, total)
-        accuracy = 100.0 * correct / max(1, total)
-        print(f"Epoch {epoch}/{epochs} - loss: {avg_loss:.4f} - accuracy: {accuracy:.1f}%")
+        train_accuracy = 100.0 * correct / max(1, total)
+        val_accuracy = _evaluate(model, val_loader, device)
+        print(f"Epoch {epoch}/{epochs} - loss: {avg_loss:.4f} - train acc: {train_accuracy:.1f}% - TEST acc: {val_accuracy:.1f}%")
 
-        if avg_loss < best_loss:
-            best_loss = avg_loss
+        if val_accuracy > best_val_acc:
+            best_val_acc = val_accuracy
             # torch.save truncates the destination immediately, so saving
             # straight to model_out_path would wipe the last-good checkpoint
             # the instant a new one starts writing — if the process dies
@@ -216,10 +253,11 @@ def train_classifier(
             tmp_path = model_out_path.with_suffix(model_out_path.suffix + ".tmp")
             torch.save(model.state_dict(), tmp_path)
             tmp_path.replace(model_out_path)
-            print(f"  Saved best model (loss: {avg_loss:.4f})")
+            print(f"  Saved best model (held-out test acc: {val_accuracy:.1f}%)")
 
-    print(f"\nTraining complete. Best loss: {best_loss:.4f}")
+    print(f"\nBest held-out TEST accuracy: {best_val_acc:.1f}%")
     print(f"Model saved to: {model_out_path}")
+    return best_val_acc
 
 
 def main():

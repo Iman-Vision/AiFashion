@@ -9,8 +9,8 @@
 <body class="bg">
   <div class="container">
     <div class="hero">
-      <h1>Is this right?</h1>
-      <p>Auto-detection can miss real-world photos (a person wearing it, not a flat product shot) — confirm or correct each one before we build your mood boards.</p>
+      <h1>Just double-checking one thing</h1>
+      <p>We're confident about most of these, but not all — confirm or correct the uncertain one(s) before we build your mood boards. (Auto-detection can miss real-world photos: a person wearing it, not a flat product shot.)</p>
     </div>
     <form class="panel" action="{{ url_for('generate') }}" method="post">
       {% for item in items %}
@@ -18,9 +18,16 @@
       <div class="card confirm-item">
         <img src="{{ item.url }}" alt="upload preview" class="confirm-preview">
         <div class="confirm-fields">
+          {% if item.confident %}
+          <div class="note" style="margin:0">
+            Detected: <strong>{{ item.detected|title }}</strong> ({{ (item.confidence * 100)|round|int }}% confidence) — looks clear, no need to check this one.
+          </div>
+          <input type="hidden" name="path" value="{{ item.path }}">
+          <input type="hidden" name="type_{{ item_idx }}" value="{{ item.detected }}">
+          {% else %}
           <div class="note" style="margin:0 0 10px">
             Detected: <strong>{{ item.detected|title }}</strong>
-            ({{ (item.confidence * 100)|round|int }}% confidence)
+            (only {{ (item.confidence * 100)|round|int }}% confidence — please confirm or correct)
           </div>
           <input type="hidden" name="path" value="{{ item.path }}">
           <div class="check-list">
@@ -37,6 +44,7 @@
             </label>
             {% endif %}
           </div>
+          {% endif %}
         </div>
       </div>
       {% endfor %}

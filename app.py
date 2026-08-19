@@ -91,12 +91,19 @@ def _all_boards_context(boards) -> list:
     return [_board_context_vectors(b) for b in boards]
 
 
+# Below this, the model isn't confident enough to trust silently — ask.
+# At or above it, just build the boards straight away; interrupting a
+# confident, almost-certainly-correct guess is friction with no upside.
+CONFIDENCE_THRESHOLD = 0.85
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    """Step 1: save the upload(s), run detection, and ask the user to
-    confirm or correct what each photo actually is before building any
-    boards — the classifier can be confidently wrong on real (non-catalog)
-    photos, so we don't silently trust it (see README's Known Limitations)."""
+    """Step 1: save the upload(s), run detection. Confident guesses go
+    straight to board generation; only genuinely uncertain ones stop to
+    ask the user to confirm/correct — the classifier can be confidently
+    wrong on real (non-catalog) photos (see README's Known Limitations),
+    but there's no reason to interrupt the ones it's actually sure of."""
     img_files = [f for f in request.files.getlist("image") if f and f.filename]
     cam_data = request.form.get("camera_image")
 
@@ -115,20 +122,30 @@ def analyze():
             "url": url_for("uploads", filename=Path(saved_path).name),
             "detected": detected,
             "confidence": confidence,
+            "confident": confidence >= CONFIDENCE_THRESHOLD,
         })
+
+    if all(item["confident"] for item in items):
+        paths = [item["path"] for item in items]
+        confirmed_types = [item["detected"] for item in items]
+        return _build_boards_response(paths, confirmed_types)
 
     return render_template("confirm.html", items=items, allow_mixed=(len(items) == 1))
 
 
 @app.route("/generate", methods=["POST"])
 def generate():
-    """Step 2: build the boards using whatever type the user confirmed
-    (not necessarily what detection guessed)."""
+    """Step 2 (only reached when at least one upload was uncertain): build
+    the boards using whatever type the user confirmed for each photo, not
+    necessarily what detection guessed."""
     paths = request.form.getlist("path")
     if not paths:
         return redirect(url_for("index", error="missing_image"))
     confirmed_types = [request.form.get(f"type_{i}", "top") for i in range(len(paths))]
+    return _build_boards_response(paths, confirmed_types)
 
+
+def _build_boards_response(paths: list, confirmed_types: list):
     if len(paths) == 1:
         saved_path = paths[0]
         confirmed = confirmed_types[0]
