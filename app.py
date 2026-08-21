@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify
-from ai_fashion.analyzer import analyze_image, feature_vector, estimate_shoe_formality, _open_image
+from ai_fashion.analyzer import analyze_image, feature_vector, estimate_shoe_formality, remove_background, _open_image
 from ai_fashion.detector import detect_item_type_with_confidence
 from ai_fashion.recommender import (
     recommend_from_features,
@@ -82,6 +82,23 @@ def _save_camera_capture(data_uri: str) -> str:
     with open(path, "wb") as f:
         f.write(raw)
     return str(path)
+
+
+def _cutout_url(saved_path: str) -> str:
+    """Best-effort background-removed version of an uploaded photo, used
+    only for what's shown on the moodboard — analysis (color/pattern/
+    detection) still runs against the original file. Keeps uploaded pieces
+    visually consistent with the pool items, which get the same treatment
+    at index-build time. Falls back to the original if removal fails or
+    does nothing useful (e.g. a busy real-world background)."""
+    src = Path(saved_path)
+    cutout_path = src.with_name(src.stem + "_cutout.png")
+    if not cutout_path.exists():
+        try:
+            remove_background(_open_image(saved_path)).save(cutout_path)
+        except Exception:
+            return url_for("uploads", filename=src.name)
+    return url_for("uploads", filename=cutout_path.name)
 
 
 def _formality_for(item_type: str, saved_path: str = None) -> str:
@@ -186,7 +203,7 @@ def _build_boards_response(paths: list, confirmed_types: list):
         saved_path = paths[0]
         confirmed = confirmed_types[0]
         feats = analyze_image(saved_path)
-        image_url = url_for("uploads", filename=Path(saved_path).name)
+        image_url = _cutout_url(saved_path)
 
         if confirmed == "mixed":
             target_vector = _feature_vector_for(feats, saved_path, None)
@@ -227,7 +244,7 @@ def _build_boards_response(paths: list, confirmed_types: list):
         vectors.append(vec)
         uploaded[slot] = {
             "name": DISPLAY_TYPE.get(confirmed, confirmed.title()),
-            "image": url_for("uploads", filename=Path(saved_path).name),
+            "image": _cutout_url(saved_path),
             "vector": vec.tolist(),
         }
 

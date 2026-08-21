@@ -30,39 +30,34 @@
         <section class="canvas" data-board-index="{{ loop.index0 }}">
           {% set pal = (b.palette or []) + ['#ddd', '#eee', '#ccc'] %}
           <div class="canvas-title">{{ b.title }}</div>
-          <div class="piece-grid">
-            {% if b.top %}
-            <figure class="piece p-top">
-              <img src="{{ b.top.image }}" alt="Top">
-              <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
-            </figure>
-            {% endif %}
-            {% if b.bottom %}
-            <figure class="piece p-bottom">
-              <img src="{{ b.bottom.image }}" alt="Bottom">
-              <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
-            </figure>
-            {% endif %}
-            {% if b.shoes %}
-            <figure class="piece p-shoes">
-              <img src="{{ b.shoes.image }}" alt="Shoes">
-              <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
-            </figure>
-            {% endif %}
-            {% if b.outwear %}
-            <figure class="piece p-outwear">
-              <img src="{{ b.outwear.image }}" alt="Outwear">
-              <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
-            </figure>
-            {% endif %}
-          </div>
-          <div class="board-footer">
-            <div class="swatch-row">
-              <span class="swatch" style="background:{{ pal[0] }}"></span>
-              <span class="swatch" style="background:{{ pal[1] }}"></span>
-              <span class="swatch" style="background:{{ pal[2] }}"></span>
-            </div>
-          </div>
+          {% if b.top %}
+          <figure class="piece p-top">
+            <img src="{{ b.top.image }}" alt="Top">
+            <figcaption class="cap">{{ b.top.name or 'Top' }}</figcaption>
+          </figure>
+          {% endif %}
+          {% if b.bottom %}
+          <figure class="piece p-bottom">
+            <img src="{{ b.bottom.image }}" alt="Bottom">
+            <figcaption class="cap">{{ b.bottom.name or 'Bottom' }}</figcaption>
+          </figure>
+          {% endif %}
+          {% if b.shoes %}
+          <figure class="piece p-shoes">
+            <img src="{{ b.shoes.image }}" alt="Shoes">
+            <figcaption class="cap">{{ b.shoes.name or 'Shoes' }}</figcaption>
+          </figure>
+          {% endif %}
+          {% if b.outwear %}
+          <figure class="piece p-outwear">
+            <img src="{{ b.outwear.image }}" alt="Outwear">
+            <figcaption class="cap">{{ b.outwear.name or 'Outwear' }}</figcaption>
+          </figure>
+          {% endif %}
+          <div class="swatch s1" style="background:{{ pal[0] }}"></div>
+          <div class="swatch s2" style="background:{{ pal[1] }}"></div>
+          <div class="swatch s3" style="background:{{ pal[2] }}"></div>
+          <div class="acc-strip"></div>
         </section>
         {% endfor %}
       </div>
@@ -97,32 +92,30 @@
     // one context-vector list per board, indexed same as data-board-index
     const boardContexts = {{ (context_vectors or '[]') | safe }};
 
-    // Every add-on (outwear or any accessory category) becomes a full
-    // piece card in the grid — same size/treatment as top/bottom/shoes,
-    // genuinely part of the moodboard rather than a small floating chip.
-    // One card per category per board; ticking replaces/creates it,
-    // unticking removes it — the checkbox state IS the board state.
+    // Every add-on (outwear or any accessory category) becomes a small chip
+    // in the board's fixed bottom strip — not another absolutely-positioned
+    // card, since an arbitrary/growing number of those is exactly what
+    // caused the collage cards to overlap before. One chip per category
+    // per board; ticking adds/replaces it, unticking removes it.
     function addPieceToBoard(canvas, category, item) {
+      const strip = canvas.querySelector('.acc-strip');
       const slotClass = 'p-add-' + category;
-      let figure = canvas.querySelector('.' + slotClass);
-      if (!figure) {
-        figure = document.createElement('figure');
-        figure.className = 'piece ' + slotClass;
+      let chip = strip.querySelector('.' + slotClass);
+      if (!chip) {
+        chip = document.createElement('div');
+        chip.className = 'acc-chip ' + slotClass;
         const img = document.createElement('img');
-        const cap = document.createElement('figcaption');
-        cap.className = 'cap';
-        figure.appendChild(img);
-        figure.appendChild(cap);
-        canvas.querySelector('.piece-grid').appendChild(figure);
+        chip.appendChild(img);
+        strip.appendChild(chip);
       }
-      figure.querySelector('img').src = item.image;
-      figure.querySelector('img').alt = item.name;
-      figure.querySelector('figcaption').textContent = item.name;
+      chip.title = item.name;
+      chip.querySelector('img').src = item.image;
+      chip.querySelector('img').alt = item.name;
     }
 
     function removePieceFromBoard(canvas, category) {
-      const figure = canvas.querySelector('.p-add-' + category);
-      if (figure) figure.remove();
+      const chip = canvas.querySelector('.p-add-' + category);
+      if (chip) chip.remove();
     }
 
     async function fetchBest(category, context) {

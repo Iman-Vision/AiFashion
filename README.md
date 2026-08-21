@@ -164,11 +164,23 @@ the flags below ask for; they silently take everything available instead.**
 Re-downloading the full Re-PolyVore dump is the only way to get more.
 
 **`build_gallery_index.py`** — rebuilds `models/gallery_index.json` (the
-matching pool) and re-extracts color/pattern/texture/formality for every
-item:
+matching pool), re-extracts color/pattern/texture/formality for every item,
+and produces a background-removed `*_cutout.png` cutout of it (flood-fill
+from the four corners with a color-distance threshold — see
+`analyzer.remove_background`) for display on the moodboard; the original
+JPG is left alone alongside it (`build_classifier_dataset.py` still needs
+it, and background doesn't matter for classification). Works well for the
+solid-color studio backdrops most of this dataset is shot on, including
+non-white ones (a shirt on a black backdrop was showing as a solid black
+rectangle before this); does nothing useful for busy/on-model photos, which
+just keep their original background. Takes a few minutes for the full pool
+(~130ms/image):
 ```
 python build_gallery_index.py --per-category 400
 ```
+Uploaded photos get the same cutout treatment on the fly at request time
+(`app.py`'s `_cutout_url`), so uploaded pieces look visually consistent
+with the matched pool items on the board.
 
 **`build_classifier_dataset.py`** + **`train_all.py`** — rebuilds the
 classifier training set and retrains it:
@@ -228,6 +240,12 @@ dataset/                classifier training images (gitignored)
 - Shoe formality is a silhouette *heuristic*, not ground truth — it will
   misjudge some shoes (e.g. a flat but narrow dress shoe, or a chunky
   platform heel).
+- Background removal (`remove_background`) is a corner-flood-fill
+  heuristic, not real segmentation — it only removes regions connected to
+  a corner within a color-distance threshold. A solid studio backdrop
+  (white, black, grey — most of the dataset) comes out clean; a busy or
+  on-model photo just keeps its original background since there's no
+  matching corner region to flood from.
 - The classifier only distinguishes top/outwear/bottom/shoes — pants vs.
   skirt within "bottom" isn't detected from an uploaded photo, only from
   the pool (where the source folder is known).

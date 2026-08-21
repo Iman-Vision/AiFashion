@@ -6,10 +6,11 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 try:
-    from PIL import Image, ImageFilter
+    from PIL import Image, ImageFilter, ImageDraw
 except Exception:
     Image = None  # type: ignore
     ImageFilter = None  # type: ignore
+    ImageDraw = None  # type: ignore
 
 PATTERNS = ["solid", "checked", "striped_vertical", "striped_horizontal", "print"]
 TEXTURES = ["smooth", "textured"]
@@ -102,6 +103,28 @@ def _open_image(path_or_url: str):
     if not p.exists():
         raise FileNotFoundError(str(p))
     return Image.open(str(p)).convert("RGB")
+
+
+def remove_background(img, tolerance: int = 28):
+    """Best-effort background removal: flood-fills inward from each of the
+    four corners using a color-distance threshold, turning matched
+    background pixels transparent. Works well for the solid-color studio
+    backdrops most of this dataset is shot on (white, black, grey) —
+    including the black ones, which is why they were showing as ugly solid
+    rectangles once the white card background was removed for the flat-lay
+    look. Does nothing useful for busy/on-model photos with real
+    backgrounds; those just keep their background, which is fine since the
+    piece still gets a white card behind it as a fallback."""
+    if ImageDraw is None:
+        return img.convert("RGBA")
+    rgba = img.convert("RGBA")
+    w, h = rgba.size
+    for corner in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
+        try:
+            ImageDraw.floodfill(rgba, corner, (0, 0, 0, 0), thresh=tolerance)
+        except Exception:
+            pass
+    return rgba
 
 
 def _is_studio_background(rgb) -> bool:

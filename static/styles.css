@@ -50,36 +50,51 @@ body.bg{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system
 .feat{display:inline-flex;align-items:center;gap:4px}
 .mini-swatch{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid var(--border);vertical-align:middle;margin-left:2px}
 
-/* Canvas — collage look (rotated scattered photo cards), but laid out with
-   CSS Grid instead of hand-picked pixel coordinates. Rotation/shadow give
-   the same "photos on a corkboard" feel; grid guarantees cards can never
-   mathematically overlap regardless of container width or how many pieces
-   a board ends up with. */
-.canvas{position:relative;background:linear-gradient(150deg,var(--card),var(--bg2));border:1px solid var(--border);border-radius:20px;box-shadow:0 28px 56px rgba(0,0,0,.10);padding:32px;margin-bottom:32px}
-.canvas-title{font-weight:800;letter-spacing:.5px;font-size:19px;color:#111827;margin-bottom:22px}
-.piece-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:36px 26px;padding-top:8px}
-.piece{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.16);overflow:hidden;display:flex;flex-direction:column}
-.piece img{display:block;width:100%;object-fit:contain;background:#fdfdfd}
-.cap{padding:9px 12px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.2px;color:var(--muted);border-top:1px solid var(--border)}
-/* varied proportions per piece type — a portrait top/bottom, landscape
-   shoes, taller outwear — plus rotation/vertical drift give the scattered-
-   photos feel back; every value is purely cosmetic (transform doesn't
-   affect the grid's reserved box), so nothing can overlap regardless. */
-.p-top img{aspect-ratio:3/4}
-.p-bottom img{aspect-ratio:3/4}
-.p-shoes img{aspect-ratio:4/3}
-.p-outwear img{aspect-ratio:4/5}
-.piece[class*="p-add-"] img{aspect-ratio:1/1}
-.p-top{transform:rotate(-2deg) translateY(4px)}
-.p-bottom{transform:rotate(1.6deg) translateY(-6px)}
-.p-shoes{transform:rotate(-1.3deg) translateY(8px)}
-.p-outwear{transform:rotate(2.2deg) translateY(-4px)}
-.piece[class*="p-add-"]:nth-child(odd){transform:rotate(-1.4deg) translateY(3px)}
-.piece[class*="p-add-"]:nth-child(even){transform:rotate(1.4deg) translateY(-3px)}
+/* Canvas — flat-lay scrapbook look: cut-out photos floating directly on a
+   plain background at varied scale, soft drop-shadows instead of bordered
+   cards, no caption chrome, deliberate loose overlap (not a bug here —
+   that's the actual look being matched: a hero top/bottom pair anchoring
+   the board with smaller accent pieces tucked around/under them).
+   width/left/right are PERCENT (always resolve fine — a block's width is
+   always definite); height is fixed PX. Percentage height on an absolutely
+   positioned box only resolves against a parent with an explicit height,
+   and .canvas only had min-height (auto-derived otherwise) — so height:%
+   silently fell back to the image's natural intrinsic size, which is what
+   blew the layout out to way-oversized pieces. Fixed px sidesteps that. */
+.canvas{position:relative;background:var(--bg2);border:1px solid var(--border);border-radius:20px;box-shadow:0 28px 56px rgba(0,0,0,.08);padding:28px;height:780px;margin-bottom:32px}
+.canvas-title{position:absolute;top:18px;left:24px;font-weight:800;letter-spacing:.5px;font-size:16px;color:var(--muted);z-index:5}
+/* White backing behind every piece: dataset photos aren't background-
+   removed — most are on a white backdrop, but some (like a shirt shot on
+   black) aren't, and with no backing at all that shows as a raw black
+   rectangle. White is the safe fallback for both cases. */
+.piece{position:absolute;background:#fff;border:none;border-radius:10px;box-shadow:0 14px 26px rgba(0,0,0,.14)}
+.piece img{display:block;width:100%;height:100%;object-fit:contain}
+.cap{position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.92);padding:2px 10px;border-radius:999px;font-size:10px;font-weight:700;color:var(--muted);opacity:0;transition:opacity .15s ease;white-space:nowrap}
+.piece:hover .cap{opacity:1}
+.p-top{top:24px;right:2%;width:46%;height:340px;z-index:3}
+.p-bottom{top:280px;right:6%;width:40%;height:420px;z-index:2}
+.p-shoes{bottom:24px;left:3%;width:30%;height:190px;z-index:4}
+.p-outwear{top:24px;left:2%;width:28%;height:220px;z-index:1}
 
-.board-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:20px;flex-wrap:wrap}
-.swatch-row{display:flex;gap:8px}
-.swatch{display:inline-block;width:32px;height:32px;border-radius:8px;border:1px solid #e5e7eb;box-shadow:0 4px 10px rgba(0,0,0,.08)}
+/* optional add-ons (sidebar) — small scattered accents down the left side,
+   matching the reference's rings/headphones/lip-balm treatment: no card
+   chrome, just a floating cutout, same as the main pieces. */
+.swatch{position:absolute;display:inline-block;width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.15)}
+.s1{top:24px;left:34%}
+.s2{top:24px;left:41%}
+.s3{top:24px;left:48%}
+/* Confined to the band between outwear's bottom edge (24+220=244px) and
+   shoes' top edge (780-24-190=566px) — a fixed 300px zone that can never
+   drift into either photo, regardless of how many chips land in it. */
+.acc-strip{position:absolute;top:250px;left:2%;width:26%;height:300px}
+.acc-chip{position:absolute;width:64px;height:64px;background:#fff;border-radius:10px;box-shadow:0 10px 18px rgba(0,0,0,.16)}
+.acc-chip img{display:block;width:100%;height:100%;object-fit:contain}
+/* cycle through a handful of preset scatter spots so multiple add-ons
+   still land somewhere sensible without ever needing exact math per item */
+.acc-chip:nth-of-type(4n+1){top:0;left:12%}
+.acc-chip:nth-of-type(4n+2){top:78px;left:0}
+.acc-chip:nth-of-type(4n+3){top:156px;left:16%}
+.acc-chip:nth-of-type(4n+4){top:230px;left:0}
 
 /* board + sidebar layout */
 .board-layout{display:grid;grid-template-columns:1fr 320px;gap:28px;align-items:start}
@@ -106,6 +121,14 @@ html:not(.dark) .icon-moon{display:none}
 @media (max-width:980px){
   .grid{grid-template-columns:1fr}
   .g2{grid-template-columns:1fr}
-  .piece-grid{grid-template-columns:repeat(2,1fr)}
   .theme-toggle{top:auto;bottom:16px;right:16px}
+  /* Percentage-based side-by-side collage doesn't have room on narrow
+     screens — switch every piece to a simple stacked flow instead of
+     trying to scale the same coordinates down further. */
+  .canvas{height:auto;padding:24px;padding-top:64px}
+  .piece{position:relative;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;width:100%;height:280px;margin-bottom:16px}
+  .piece img{border-radius:12px}
+  .swatch{position:relative;top:auto !important;left:auto !important;display:inline-block;margin-right:8px}
+  .acc-strip{position:relative;top:auto;left:auto;width:auto;height:auto;display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .acc-chip{position:relative;top:auto !important;left:auto !important;width:56px;height:56px}
 }
